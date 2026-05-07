@@ -1,0 +1,347 @@
+/* ═══════════════════════════════════════════════════════════════════
+   ELECT — Design System  |  Colors + Type Tokens
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Web fonts ─────────────────────────────────────────────────────
+   Brand fonts (licensed, in fonts/):
+     • Moneta — Light/Regular/Bold/Black           → H1, H2 (UPPERCASE)
+     • Akzidenz Grotesk BE Extended — Light/Reg/Bd → H3-H5 (UPPERCASE)
+     • Akzidenz Grotesk BE — Light/Reg/Bd/Italic   → secondary sans (UI)
+     • DM Sans (Google) — body / data UI (kept for tabular data)
+   ─────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+/* — Moneta — display serif (H1/H2) — */
+@font-face {
+    font-family: 'Moneta';
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/Moneta-Light.woff2') format('woff2'),
+         url('fonts/Moneta-Light.woff')  format('woff'),
+         url('fonts/Moneta-Light.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Moneta';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/Moneta-Regular.woff2') format('woff2'),
+         url('fonts/Moneta-Regular.woff')  format('woff'),
+         url('fonts/Moneta-Regular.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Moneta';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/Moneta-Bold.woff2') format('woff2'),
+         url('fonts/Moneta-Bold.woff')  format('woff'),
+         url('fonts/Moneta-Bold.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Moneta';
+    font-weight: 900;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/Moneta-Black.woff2') format('woff2'),
+         url('fonts/Moneta-Black.woff')  format('woff'),
+         url('fonts/Moneta-Black.ttf')   format('truetype');
+}
+
+/* — Akzidenz Grotesk BE Extended — headline (H3-H5) — */
+@font-face {
+    font-family: 'Akzidenz Grotesk BE EX';
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-LightEx.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-LightEx.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-LightEx.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Akzidenz Grotesk BE EX';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-Ex.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-Ex.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-Ex.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Akzidenz Grotesk BE EX';
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-MdEx.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-MdEx.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-MdEx.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Akzidenz Grotesk BE EX';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-BoldEx.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-BoldEx.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-BoldEx.ttf')   format('truetype');
+}
+
+/* — Akzidenz Grotesk BE — standard width (secondary sans) — */
+@font-face {
+    font-family: 'Akzidenz Grotesk BE';
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-Light.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-Light.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-Light.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Akzidenz Grotesk BE';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-Regular.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-Regular.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-Regular.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Akzidenz Grotesk BE';
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-It.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-It.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-It.ttf')   format('truetype');
+}
+@font-face {
+    font-family: 'Akzidenz Grotesk BE';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src: url('fonts/AkzidenzGroteskBE-Bold.woff2') format('woff2'),
+         url('fonts/AkzidenzGroteskBE-Bold.woff')  format('woff'),
+         url('fonts/AkzidenzGroteskBE-Bold.ttf')   format('truetype');
+}
+
+:root {
+    /* ═══════════════ COLOR TOKENS ═══════════════ */
+
+    /* — Brand primitives — */
+    --gold:          #C2AE92;
+    --gold-hover:    #B09D81;
+    --gold-15:       rgba(194,174,146,0.15);
+    --gold-30:       rgba(194,174,146,0.30);
+
+    --blue:          #03252F;   /* deep navy / brand dark */
+    --blue-light:    #002E3B;
+
+    --black:         #000000;
+    --off-black:     #1E1E1C;
+    --white:         #FFFFFF;
+    --offwhite:      #F3F1EE;
+    --light-grey:    #F3F1EF;
+
+    /* — Foreground / background semantic — */
+    --fg-1:          var(--off-black);              /* primary text   */
+    --fg-2:          rgba(0,0,0,0.55);              /* muted text     */
+    --fg-on-dark-1:  rgba(255,255,255,0.92);
+    --fg-on-dark-2:  rgba(255,255,255,0.70);
+    --fg-on-dark-3:  rgba(255,255,255,0.50);
+
+    --bg-page:       var(--offwhite);
+    --bg-surface:    var(--white);
+    --bg-sunken:     var(--light-grey);
+    --bg-dark:       var(--blue);
+
+    /* — Borders — */
+    --border-1:      rgba(0,0,0,0.06);
+    --border-2:      rgba(0,0,0,0.12);
+    --border-on-dark:rgba(255,255,255,0.08);
+
+    /* — Status colors (brand-aligned, muted) — */
+    --success:       #5A8C7C;
+    --success-bg:    #E8F3F0;
+    --success-tint:  rgba(90,140,124,0.15);
+
+    --warning:       #C9956B;
+    --warning-bg:    #FAF2EC;
+    --warning-tint:  rgba(201,149,107,0.15);
+
+    --error:         #A25B5B;
+    --error-bg:      #F8EDED;
+    --error-tint:    rgba(162,91,91,0.15);
+
+    --info:          #6B8BA3;
+    --info-bg:       #EDF2F6;
+    --info-tint:     rgba(107,139,163,0.15);
+
+    /* ═══════════════ TYPE TOKENS ═══════════════ */
+
+    /* Font families
+       --font-display  = Moneta substitute (DM Serif Display)
+       --font-headline = Akzidenz Grotesk BE EX substitute (Archivo, extended)
+       --font-body     = DM Sans                                       */
+    --font-display:  'Moneta', Georgia, 'Times New Roman', serif;
+    --font-headline: 'Akzidenz Grotesk BE EX', 'Helvetica Neue', Arial, sans-serif;
+    --font-sans:     'Akzidenz Grotesk BE', 'Helvetica Neue', Arial, sans-serif;
+    --font-body:     'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+
+    /* Type scale (px @ desktop) */
+    --fs-display:    72px;    /* hero numbers / display moments      */
+    --fs-h1:         56px;
+    --fs-h2:         40px;
+    --fs-h3:         28px;
+    --fs-h4:         20px;
+    --fs-h5:         16px;
+    --fs-h6:         14px;
+    --fs-body-lg:    17px;
+    --fs-body:       15px;
+    --fs-body-sm:    13px;
+    --fs-caption:    12px;
+    --fs-micro:      11px;
+
+    /* Tracking — extended grotesques love wide tracking when uppercase */
+    --tracking-tight:   -0.01em;
+    --tracking-normal:   0;
+    --tracking-wide:     0.06em;
+    --tracking-widest:   0.14em;
+
+    /* Line height */
+    --lh-tight: 1.1;
+    --lh-snug:  1.25;
+    --lh-base:  1.55;
+    --lh-relaxed: 1.7;
+
+    /* ═══════════════ SHAPE / SURFACE TOKENS ═══════════════ */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 999px;
+
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 12px 24px rgba(0,0,0,0.12);
+    --shadow-xl: 0 20px 40px rgba(0,0,0,0.15);
+
+    /* ═══════════════ SPACING ═══════════════ */
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  24px;
+    --space-6:  32px;
+    --space-7:  48px;
+    --space-8:  64px;
+    --space-9:  96px;
+
+    /* ═══════════════ MOTION ═══════════════ */
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-out:      cubic-bezier(0, 0, 0.2, 1);
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slow: 300ms;
+}
+
+/* ═══════════════════════════════════════════
+   BASE TYPOGRAPHY (semantic tags)
+   ═══════════════════════════════════════════ */
+
+body {
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    line-height: var(--lh-base);
+    color: var(--fg-1);
+    background: var(--bg-page);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* H1 / H2 — Moneta, UPPERCASE */
+h1, .h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: var(--fs-h1);
+    line-height: var(--lh-tight);
+    letter-spacing: var(--tracking-normal);
+    text-transform: uppercase;
+    color: var(--fg-1);
+    margin: 0 0 var(--space-5);
+}
+h2, .h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: var(--fs-h2);
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-normal);
+    text-transform: uppercase;
+    color: var(--fg-1);
+    margin: 0 0 var(--space-4);
+}
+
+/* H3–H5 — Akzidenz Grotesk BE EX (extended grotesque), UPPERCASE */
+h3, .h3 {
+    font-family: var(--font-headline);
+    font-weight: 500;
+    font-size: var(--fs-h3);
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--fg-1);
+    margin: 0 0 var(--space-4);
+}
+h4, .h4 {
+    font-family: var(--font-headline);
+    font-weight: 500;
+    font-size: var(--fs-h4);
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-widest);
+    text-transform: uppercase;
+    color: var(--fg-1);
+    margin: 0 0 var(--space-3);
+}
+h5, .h5 {
+    font-family: var(--font-headline);
+    font-weight: 500;
+    font-size: var(--fs-h5);
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-widest);
+    text-transform: uppercase;
+    color: var(--fg-1);
+    margin: 0 0 var(--space-2);
+}
+h6, .h6, .eyebrow {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: var(--fs-h6);
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-widest);
+    text-transform: uppercase;
+    color: var(--fg-2);
+    margin: 0 0 var(--space-2);
+}
+
+p { margin: 0 0 var(--space-4); }
+small, .text-sm { font-size: var(--fs-body-sm); }
+.text-muted { color: var(--fg-2); }
+
+/* Display — for big stat / hero moments */
+.display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: var(--fs-display);
+    line-height: 0.95;
+    letter-spacing: var(--tracking-tight);
+    text-transform: uppercase;
+}
+
+/* Editorial italic accent — Moneta italic */
+.italic-accent {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    text-transform: none;
+}

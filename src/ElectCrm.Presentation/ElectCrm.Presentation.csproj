@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ElectCrm.Application\ElectCrm.Application.csproj" />
+    <ProjectReference Include="..\ElectCrm.Infrastructure\ElectCrm.Infrastructure.csproj" />
+    <ProjectReference Include="..\ElectCrm.Shared\ElectCrm.Shared.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>3e377e63-bdbc-4beb-b435-9bcc88e6cf84</UserSecretsId>
+  </PropertyGroup>
+
+</Project>

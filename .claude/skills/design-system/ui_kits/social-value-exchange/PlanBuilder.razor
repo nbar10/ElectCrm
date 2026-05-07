@@ -1,0 +1,123 @@
+@* PlanBuilder.razor — catalogue + sticky basket *@
+
+<Topbar Title="New Social Value Plan">
+    <Actions>
+        <Button Variant="light" Size="sm">Save draft</Button>
+        <Button Variant="gold" Size="sm">Publish plan</Button>
+    </Actions>
+</Topbar>
+
+<div class="elect-content">
+    <div class="breadcrumb">
+        <span>Plans</span>
+        <i class="bi bi-chevron-right"></i>
+        <span>2026 framework</span>
+        <i class="bi bi-chevron-right"></i>
+        <span class="strong">Build plan</span>
+    </div>
+
+    <div class="builder-grid">
+        <div>
+            <Card Title="Choose social value outcomes">
+                <HeaderRight>
+                    <input type="text" class="search-input" placeholder="Search outcomes..." />
+                </HeaderRight>
+                <ChildContent>
+                    <div class="plan-row h">
+                        <div>Outcome</div><div>Proxy</div><div>Unit price</div><div></div>
+                    </div>
+                    @foreach (var item in Catalogue)
+                    {
+                        <div class="plan-row">
+                            <div>
+                                <div class="strong">
+                                    <span class="code">@item.Code</span>
+                                    @item.Name
+                                </div>
+                                <div class="when">@item.Unit</div>
+                            </div>
+                            <div><span class="proxy-chip">@item.Proxy</span></div>
+                            <div class="score">@Money(item.Price)</div>
+                            <div class="row-end">
+                                <button class="btn outline sm pad-tight" @onclick="() => Add(item)">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </ChildContent>
+            </Card>
+        </div>
+
+        <div class="basket">
+            <div class="basket-h">Plan basket (@Basket.Count)</div>
+            @if (Basket.Count == 0)
+            {
+                <div class="basket-empty">
+                    <i class="bi bi-basket"></i>
+                    Add outcomes from the catalogue.
+                </div>
+            }
+            else
+            {
+                @foreach (var b in Basket)
+                {
+                    <div class="basket-item">
+                        <div>
+                            <div class="name">@b.Name</div>
+                            <div class="when">@b.Qty × @Money(b.Price)</div>
+                        </div>
+                        <div class="basket-right">
+                            <span class="price">@Money(b.Price * b.Qty)</span>
+                            <button class="basket-remove" @onclick="() => Remove(b.Id)">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+                <div class="basket-totals">
+                    <div class="total-row"><span>Cash value</span><span>@Money(Total)</span></div>
+                    <div class="total-row proxy"><span>Social value (HACT/TOMs)</span><span>@Money(ProxyValue)</span></div>
+                    <div class="total-row main"><span>Total committed</span><span>@Money(Total + ProxyValue)</span></div>
+                    <Button Variant="gold" Style="width:100%;margin-top:1rem">Publish to partners</Button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    public record CatalogueItem(string Id, string Code, string Name, string Unit, decimal Price, string Proxy);
+    public record BasketItem(string Id, string Code, string Name, string Unit, decimal Price, string Proxy, int Qty);
+
+    [Parameter] public CatalogueItem[] Catalogue { get; set; } = Array.Empty<CatalogueItem>();
+    [Parameter] public List<BasketItem> Basket { get; set; } = new();
+    [Parameter] public EventCallback<List<BasketItem>> BasketChanged { get; set; }
+
+    private decimal Total      => Basket.Sum(b => b.Price * b.Qty);
+    private decimal ProxyValue => Total * 4.2m;
+
+    private string Money(decimal n) =>
+        "£" + n.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("en-GB"));
+
+    private async Task Add(CatalogueItem item)
+    {
+        var existing = Basket.FirstOrDefault(b => b.Id == item.Id);
+        if (existing is not null)
+        {
+            Basket.Remove(existing);
+            Basket.Add(existing with { Qty = existing.Qty + 1 });
+        }
+        else
+        {
+            Basket.Add(new BasketItem(item.Id, item.Code, item.Name, item.Unit, item.Price, item.Proxy, 1));
+        }
+        await BasketChanged.InvokeAsync(Basket);
+    }
+
+    private async Task Remove(string id)
+    {
+        Basket.RemoveAll(b => b.Id == id);
+        await BasketChanged.InvokeAsync(Basket);
+    }
+}

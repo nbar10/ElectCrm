@@ -1,0 +1,80 @@
+@* Dashboard.razor — KPIs + partner table + activity feed *@
+
+<Topbar Title="Dashboard">
+    <Actions>
+        <Button Variant="light" Size="sm">
+            <i class="bi bi-download"></i> &nbsp; Export
+        </Button>
+        <Button Variant="gold" Size="sm">+ New Plan</Button>
+    </Actions>
+</Topbar>
+
+<div class="elect-content">
+    <div class="kpi-grid">
+        @foreach (var k in Kpis)
+        {
+            <KpiCard Icon="@k.Icon" Tone="@k.Tone" Value="@k.Value" Label="@k.Label" />
+        }
+    </div>
+
+    <div class="dashboard-grid">
+        <Card Title="Partner delivery">
+            <HeaderRight>
+                <a class="link-gold">View all →</a>
+            </HeaderRight>
+            <ChildContent>
+                <table class="tbl">
+                    <thead>
+                        <tr>
+                            <th>Partner</th><th>Sector</th><th>Score</th><th>Delivered</th><th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var p in Partners)
+                    {
+                        <tr>
+                            <td class="strong">@p.Name</td>
+                            <td class="muted">@p.Sector</td>
+                            <td><span class="score">@p.Score.ToString("0.0")</span></td>
+                            <td class="serif-num">@p.Delivered</td>
+                            <td>
+                                @switch (p.Status)
+                                {
+                                    case "on-track": <Badge Tone="success">On track</Badge>; break;
+                                    case "at-risk":  <Badge Tone="warning">At risk</Badge>; break;
+                                    default:         <Badge Tone="danger">In breach</Badge>; break;
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </ChildContent>
+        </Card>
+
+        <Card Title="Recent activity">
+            <ul class="activity">
+                @foreach (var a in Activity)
+                {
+                    <li>
+                        <div class="activity-icon"><i class="bi @a.Icon"></i></div>
+                        <div>
+                            <div><strong>@a.Who</strong> @a.Did</div>
+                            <div class="when">@a.When</div>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </Card>
+    </div>
+</div>
+
+@code {
+    public record Kpi(string Icon, string Tone, string Value, string Label);
+    public record Partner(string Name, string Sector, double Score, string Status, string Delivered);
+    public record ActivityItem(string Who, string Did, string When, string Icon);
+
+    [Parameter] public Kpi[] Kpis { get; set; } = Array.Empty<Kpi>();
+    [Parameter] public Partner[] Partners { get; set; } = Array.Empty<Partner>();
+    [Parameter] public ActivityItem[] Activity { get; set; } = Array.Empty<ActivityItem>();
+}

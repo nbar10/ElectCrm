@@ -1,0 +1,14 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+html,body{margin:0;background:var(--bg-page);color:var(--fg-1);font-family:var(--font-body)}
+body{display:grid;grid-template-columns:1fr 1fr;gap:0;height:280px}
+.tile{display:flex;align-items:center;justify-content:center;padding:32px;flex-direction:column;gap:12px}
+.tile.dark{background:var(--bg-dark);color:#fff}
+.tile.light{background:var(--bg-surface)}
+.tile img{height:42px;width:auto}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;opacity:.6}
+</style></head><body>
+<div class="tile light"><img src="../assets/logo.svg" alt="Elect"><div class="lbl">On Light</div></div>
+<div class="tile dark"><img src="../assets/logo--invert.svg" alt="Elect"><div class="lbl">On Dark</div></div>
+</body></html>

@@ -1,0 +1,85 @@
+@* App.razor — host page demonstrating the click-thru. *@
+@* In a real Blazor project this would be MainLayout + page routes; here it's a single switchboard. *@
+
+@if (!Authed)
+{
+    <Login OnLogin="() => Authed = true" />
+}
+else
+{
+    <div class="elect-layout">
+        <Sidebar Active="@Route" OnNav="r => Route = r" />
+        <main class="elect-main">
+            @switch (Route)
+            {
+                case "dashboard":
+                    <Dashboard Kpis="Kpis" Partners="PartnersData" Activity="ActivityFeed" />
+                    break;
+                case "partners":
+                    <Partners Partners="PartnersData" />
+                    break;
+                case "plans":
+                    <PlanBuilder Catalogue="Catalogue" Basket="Basket" BasketChanged="b => Basket = b" />
+                    break;
+                default:
+                    <Topbar Title="@(char.ToUpper(Route[0]) + Route[1..])" />
+                    <div class="elect-content">
+                        <Card>
+                            <ChildContent>
+                                <div class="empty-state">
+                                    <i class="bi bi-window-stack"></i>
+                                    <h3>@Route screen</h3>
+                                    <p>This screen is not part of the UI kit prototype.</p>
+                                </div>
+                            </ChildContent>
+                        </Card>
+                    </div>
+                    break;
+            }
+        </main>
+    </div>
+}
+
+@code {
+    private bool   Authed { get; set; } = false;
+    private string Route  { get; set; } = "dashboard";
+
+    private List<PlanBuilder.BasketItem> Basket { get; set; } = new();
+
+    // ─── seed data — replace with your services / EF queries ─────────────
+    private Dashboard.Kpi[] Kpis = new[]
+    {
+        new Dashboard.Kpi("bi-graph-up-arrow", "gold",  "£2.4M", "Total social value committed"),
+        new Dashboard.Kpi("bi-check2-circle",  "green", "87%",   "Delivery against plan"),
+        new Dashboard.Kpi("bi-people-fill",    "blue",  "142",   "Active partners"),
+        new Dashboard.Kpi("bi-calendar-event", "amber", "23",    "Reports due this month"),
+    };
+
+    private Dashboard.Partner[] PartnersData = new[]
+    {
+        new Dashboard.Partner("Bouygues UK",            "Construction",  8.4, "on-track", "£412k"),
+        new Dashboard.Partner("Wates Group",            "Construction",  7.9, "on-track", "£298k"),
+        new Dashboard.Partner("Northern Care Alliance", "Health",        9.1, "on-track", "£186k"),
+        new Dashboard.Partner("Veolia",                 "Environmental", 6.4, "at-risk",  "£94k"),
+        new Dashboard.Partner("Mitie",                  "Facilities",    7.2, "on-track", "£221k"),
+        new Dashboard.Partner("Capita",                 "Outsourcing",   5.1, "breach",   "£42k"),
+    };
+
+    private Dashboard.ActivityItem[] ActivityFeed = new[]
+    {
+        new Dashboard.ActivityItem("Bouygues UK",            "submitted Q3 evidence pack",            "2h ago",     "bi-file-earmark-arrow-up"),
+        new Dashboard.ActivityItem("Sarah Mendez",           "approved Veolia quarterly report",      "Yesterday",  "bi-check2-circle"),
+        new Dashboard.ActivityItem("Northern Care Alliance", "uploaded 14 case studies",              "2 days ago", "bi-images"),
+        new Dashboard.ActivityItem("System",                 "flagged Capita as at-risk for breach",  "3 days ago", "bi-exclamation-triangle"),
+    };
+
+    private PlanBuilder.CatalogueItem[] Catalogue = new[]
+    {
+        new PlanBuilder.CatalogueItem("c1", "NS1", "Local employment — apprenticeships",       "per FTE",  21500m,  "HACT"),
+        new PlanBuilder.CatalogueItem("c2", "NS2", "Skills training delivered to NEET adults", "per hour",    38m,  "HACT"),
+        new PlanBuilder.CatalogueItem("c3", "NS3", "Procurement spend with VCSE suppliers",    "per £",     1.04m,  "TOMs"),
+        new PlanBuilder.CatalogueItem("c4", "NS4", "Carbon emissions reduction",               "per tCO₂",   87m,  "TOMs"),
+        new PlanBuilder.CatalogueItem("c5", "NS5", "STEM volunteering hours",                  "per hour",   32m,  "HACT"),
+        new PlanBuilder.CatalogueItem("c6", "NS6", "Community grant funding",                  "per £",     1.15m,  "TOMs"),
+    };
+}

@@ -1,0 +1,17 @@
+@* Button.razor — gold / dark / outline / light variants *@
+
+<button type="@Type"
+        class="btn @Variant @(Size == "sm" ? "sm" : "")"
+        @onclick="OnClick"
+        style="@Style">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public string Variant { get; set; } = "gold";  // gold | dark | outline | light
+    [Parameter] public string? Size { get; set; }              // sm | null
+    [Parameter] public string Type { get; set; } = "button";   // button | submit
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

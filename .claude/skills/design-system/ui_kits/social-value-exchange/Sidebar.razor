@@ -1,0 +1,64 @@
+@* Sidebar.razor — fixed navy sidebar with brand, sections, nav links, user footer *@
+@* Drop into a Blazor project. Pair with kit.css (or merge into your site.css). *@
+
+<aside class="elect-sidebar">
+    <div class="brand">
+        <img src="~/assets/logo--invert.svg" alt="Elect" />
+    </div>
+
+    @foreach (var section in Sections)
+    {
+        <div class="nav-section">
+            <div class="nav-section-label">@section.Label</div>
+            @foreach (var item in section.Items)
+            {
+                <a class="nav-link @(Active == item.Id ? "active" : "")"
+                   @onclick="() => OnNavigate(item.Id)">
+                    <i class="bi @item.Icon"></i>
+                    <span>@item.Name</span>
+                </a>
+            }
+        </div>
+    }
+
+    <div class="sidebar-user">
+        <div class="avatar">@User.Initials</div>
+        <div>
+            <div class="name">@User.Name</div>
+            <div class="role">@User.Role</div>
+        </div>
+    </div>
+</aside>
+
+@code {
+    [Parameter] public string Active { get; set; } = "dashboard";
+    [Parameter] public EventCallback<string> OnNav { get; set; }
+    [Parameter] public UserVm User { get; set; } = new("Sarah Mendez", "Procurement Lead", "SM");
+
+    private async Task OnNavigate(string id) => await OnNav.InvokeAsync(id);
+
+    private record NavItem(string Id, string Icon, string Name);
+    private record NavSection(string Label, NavItem[] Items);
+    public record UserVm(string Name, string Role, string Initials);
+
+    private readonly NavSection[] Sections = new[]
+    {
+        new NavSection("Overview", new[]
+        {
+            new NavItem("dashboard", "bi-grid-1x2",       "Dashboard"),
+            new NavItem("plans",     "bi-clipboard-data", "Social Value Plans"),
+            new NavItem("partners",  "bi-people",         "Partners"),
+        }),
+        new NavSection("Delivery", new[]
+        {
+            new NavItem("reports",  "bi-file-earmark-text", "Reports"),
+            new NavItem("evidence", "bi-folder2-open",      "Evidence library"),
+            new NavItem("calendar", "bi-calendar3",         "Calendar"),
+        }),
+        new NavSection("Admin", new[]
+        {
+            new NavItem("settings", "bi-gear",            "Settings"),
+            new NavItem("help",     "bi-question-circle", "Help & support"),
+        }),
+    };
+}

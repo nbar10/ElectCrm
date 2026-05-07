@@ -1,0 +1,13 @@
+@* Topbar.razor — sticky white topbar with serif page title + actions slot *@
+
+<header class="elect-topbar">
+    <h1 class="page-title">@Title</h1>
+    <div class="topbar-actions">
+        @Actions
+    </div>
+</header>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

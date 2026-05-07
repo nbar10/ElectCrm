@@ -1,0 +1,8 @@
+@* Badge.razor — status pill *@
+
+<span class="badge @Tone">@ChildContent</span>
+
+@code {
+    [Parameter] public string Tone { get; set; } = "success"; // success | warning | danger | info | primary
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

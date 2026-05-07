@@ -1,0 +1,35 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+html,body{margin:0;background:var(--bg-page);font-family:var(--font-body);color:var(--fg-1)}
+body{padding:24px 28px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.cell{display:flex;flex-direction:column;gap:6px}
+.bar{height:54px;border-radius:10px;display:flex;align-items:center;padding:0 14px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;border:1px solid}
+.swatches{display:flex;gap:4px}
+.sw{height:18px;flex:1;border-radius:4px}
+.lbl{font-size:10px;color:var(--fg-2);font-family:ui-monospace,'SF Mono',monospace}
+</style></head><body>
+<div class="grid">
+  <div class="cell">
+    <div class="bar" style="background:#E8F3F0;color:#2D5F4F;border-color:rgba(90,140,124,.25)">Success</div>
+    <div class="swatches"><div class="sw" style="background:#5A8C7C"></div><div class="sw" style="background:rgba(90,140,124,.15)"></div><div class="sw" style="background:#E8F3F0"></div></div>
+    <div class="lbl">#5A8C7C</div>
+  </div>
+  <div class="cell">
+    <div class="bar" style="background:#FAF2EC;color:#8B5E3C;border-color:rgba(201,149,107,.25)">Warning</div>
+    <div class="swatches"><div class="sw" style="background:#C9956B"></div><div class="sw" style="background:rgba(201,149,107,.15)"></div><div class="sw" style="background:#FAF2EC"></div></div>
+    <div class="lbl">#C9956B</div>
+  </div>
+  <div class="cell">
+    <div class="bar" style="background:#F8EDED;color:#7A3535;border-color:rgba(162,91,91,.25)">Error</div>
+    <div class="swatches"><div class="sw" style="background:#A25B5B"></div><div class="sw" style="background:rgba(162,91,91,.15)"></div><div class="sw" style="background:#F8EDED"></div></div>
+    <div class="lbl">#A25B5B</div>
+  </div>
+  <div class="cell">
+    <div class="bar" style="background:#EDF2F6;color:#3F5C72;border-color:rgba(107,139,163,.25)">Info</div>
+    <div class="swatches"><div class="sw" style="background:#6B8BA3"></div><div class="sw" style="background:rgba(107,139,163,.15)"></div><div class="sw" style="background:#EDF2F6"></div></div>
+    <div class="lbl">#6B8BA3</div>
+  </div>
+</div>
+</body></html>

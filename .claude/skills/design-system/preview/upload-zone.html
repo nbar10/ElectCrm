@@ -1,0 +1,15 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<style>
+html,body{margin:0;background:var(--bg-page);color:var(--fg-1);font-family:var(--font-body)}
+body{padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.zone{border:2px dashed var(--border-2);border-radius:12px;padding:2rem;text-align:center;color:var(--fg-2);font-size:.9rem;background:#fff}
+.zone i{font-size:1.8rem;display:block;margin-bottom:.5rem;color:var(--fg-2)}
+.zone.hover{border-color:var(--gold);color:var(--gold);background:rgba(194,174,146,.08)}
+.zone.hover i{color:var(--gold)}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--fg-2);margin-bottom:8px}
+</style></head><body>
+<div><div class="lbl">Default</div><div class="zone"><i class="bi bi-cloud-upload"></i>Drop evidence files here<br><small>or click to browse</small></div></div>
+<div><div class="lbl">Hover / Drop</div><div class="zone hover"><i class="bi bi-cloud-upload"></i>Drop to upload<br><small>PDF, JPG up to 10 MB</small></div></div>
+</body></html>

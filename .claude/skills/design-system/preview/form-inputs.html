@@ -1,0 +1,16 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+html,body{margin:0;background:var(--bg-page);color:var(--fg-1);font-family:var(--font-body)}
+body{padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.field{display:flex;flex-direction:column;gap:6px}
+label{font-size:.85rem;font-weight:600}
+input,select{font-family:var(--font-body);font-size:.9rem;padding:.65rem .875rem;border:1px solid var(--border-2);border-radius:8px;background:#fff;color:var(--fg-1);outline:none}
+input.focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,174,146,.15)}
+.hint{font-size:.8rem;color:var(--fg-2)}
+</style></head><body>
+<div class="field"><label>Email address</label><input value="rebecca@durhamcouncil.gov.uk"><div class="hint">We'll send your access link here.</div></div>
+<div class="field"><label>Contract value</label><input class="focus" placeholder="£0.00"><div class="hint" style="color:var(--gold)">Focused — gold ring</div></div>
+<div class="field"><label>Council region</label><select><option>North East England</option></select></div>
+<div class="field"><label>Notes</label><input placeholder="Optional"><div class="hint">8 px radius · 1 px border-2</div></div>
+</body></html>

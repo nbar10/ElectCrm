@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280">
+<title>Elect — Social Value Exchange · UI Kit</title>
+<link rel="icon" href="../../assets/favicon/favicon.ico">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="kit.css">
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script type="text/babel" src="Atoms.jsx"></script>
+<script type="text/babel" src="Chrome.jsx"></script>
+<script type="text/babel" src="Sidebar.jsx"></script>
+<script type="text/babel" src="Login.jsx"></script>
+<script type="text/babel" src="Dashboard.jsx"></script>
+<script type="text/babel" src="Partners.jsx"></script>
+<script type="text/babel" src="PlanBuilder.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+  const { useState } = React;
+
+  function App() {
+    const [authed, setAuthed]   = useState(false);
+    const [route, setRoute]     = useState('dashboard');
+    const [basket, setBasket]   = useState([]);
+
+    if (!authed) return <Login onLogin={() => setAuthed(true)} />;
+
+    const navTo = (r) => {
+      setRoute(r === 'plans' ? 'plans' : r);
+    };
+
+    let content;
+    if (route === 'dashboard')      content = <Dashboard />;
+    else if (route === 'partners')  content = <Partners />;
+    else if (route === 'plans')     content = <PlanBuilder basket={basket} setBasket={setBasket} />;
+    else content = (
+      <>
+        <Topbar title={route.charAt(0).toUpperCase() + route.slice(1)} />
+        <div className="elect-content">
+          <Card>
+            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--fg-3)' }}>
+              <i className="bi bi-window-stack" style={{ fontSize: '3rem', color: 'var(--gold)', display: 'block', marginBottom: '1rem' }}></i>
+              <h3 style={{ margin: 0, fontFamily: 'var(--font-h3)', textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--fg-1)', fontSize: '1rem' }}>
+                {route} screen
+              </h3>
+              <p style={{ marginTop: '.5rem', fontSize: '.875rem' }}>This screen is not part of the UI kit prototype.</p>
+            </div>
+          </Card>
+        </div>
+      </>
+    );
+
+    return (
+      <div className="elect-layout">
+        <Sidebar active={route} onNav={navTo} />
+        <main className="elect-main">{content}</main>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

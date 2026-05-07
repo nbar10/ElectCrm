@@ -1,0 +1,61 @@
+@* Partners.razor — full partners list view *@
+
+<Topbar Title="Partners">
+    <Actions>
+        <Button Variant="light" Size="sm"><i class="bi bi-funnel"></i> &nbsp; Filter</Button>
+        <Button Variant="gold" Size="sm">+ Invite partner</Button>
+    </Actions>
+</Topbar>
+
+<div class="elect-content">
+    <Card Title="@($"{Partners.Length} active partners")">
+        <HeaderRight>
+            <input type="text" class="search-input" placeholder="Search partners..." />
+        </HeaderRight>
+        <ChildContent>
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>Partner</th><th>Sector</th><th>Social value score</th>
+                        <th>Delivered (YTD)</th><th>Status</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var p in Partners)
+                {
+                    <tr>
+                        <td>
+                            <div class="partner-cell">
+                                <div class="partner-avatar">@p.Name[0]</div>
+                                <div>
+                                    <div class="strong">@p.Name</div>
+                                    <div class="when">UK · contract 2024–2027</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="muted">@p.Sector</td>
+                        <td>
+                            <span class="score">@p.Score.ToString("0.0")</span>
+                            <span class="when">/ 10</span>
+                        </td>
+                        <td class="serif-num">@p.Delivered</td>
+                        <td>
+                            @switch (p.Status)
+                            {
+                                case "on-track": <Badge Tone="success">On track</Badge>; break;
+                                case "at-risk":  <Badge Tone="warning">At risk</Badge>; break;
+                                default:         <Badge Tone="danger">In breach</Badge>; break;
+                            }
+                        </td>
+                        <td><i class="bi bi-three-dots row-action"></i></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </ChildContent>
+    </Card>
+</div>
+
+@code {
+    [Parameter] public Dashboard.Partner[] Partners { get; set; } = Array.Empty<Dashboard.Partner>();
+}

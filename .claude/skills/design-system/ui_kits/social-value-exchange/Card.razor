@@ -1,0 +1,22 @@
+@* Card.razor — generic card surface with optional header + headerRight slot *@
+
+<div class="card" style="@Style">
+    @if (!string.IsNullOrEmpty(Title) || HeaderRight is not null)
+    {
+        <div class="card-h">
+            @if (!string.IsNullOrEmpty(Title))
+            {
+                <h3 class="card-title">@Title</h3>
+            }
+            @HeaderRight
+        </div>
+    }
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? HeaderRight { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Style { get; set; }
+}

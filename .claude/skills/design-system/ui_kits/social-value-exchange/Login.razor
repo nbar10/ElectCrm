@@ -1,0 +1,43 @@
+@* Login.razor — full-page login on navy gradient *@
+
+<div class="login-page">
+    <form class="login-card" @onsubmit="HandleSubmit" @onsubmit:preventDefault="true">
+        <div class="brand-block">
+            <img src="~/assets/logo.svg" alt="Elect" />
+        </div>
+        <h2 class="login-title">Sign in</h2>
+        <p class="login-sub">Social Value Exchange</p>
+
+        <div class="form-row">
+            <label for="login-email">Work email</label>
+            <input id="login-email" type="email" @bind="Email" />
+        </div>
+        <div class="form-row">
+            <label for="login-pw">Password</label>
+            <input id="login-pw" type="password" @bind="Password" />
+        </div>
+
+        <div class="login-row">
+            <label class="remember">
+                <input type="checkbox" @bind="Remember" /> Remember me
+            </label>
+            <a class="forgot">Forgot password?</a>
+        </div>
+
+        <Button Variant="gold" Type="submit" Style="width:100%">Sign in</Button>
+
+        <p class="login-foot">
+            Access by invitation. <a class="forgot">Request access →</a>
+        </p>
+    </form>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnLogin { get; set; }
+
+    private string Email    { get; set; } = "sarah.mendez@manchester.gov.uk";
+    private string Password { get; set; } = "";
+    private bool   Remember { get; set; } = true;
+
+    private async Task HandleSubmit() => await OnLogin.InvokeAsync();
+}

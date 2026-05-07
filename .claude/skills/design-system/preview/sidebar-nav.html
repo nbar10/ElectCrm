@@ -1,0 +1,37 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<style>
+html,body{margin:0;background:var(--bg-page);color:var(--fg-1);font-family:var(--font-body)}
+body{padding:0;display:grid;grid-template-columns:260px 1fr;height:380px}
+.sb{background:var(--blue);color:#fff;display:flex;flex-direction:column}
+.brand{padding:1.5rem;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:center}
+.brand img{height:28px;filter:brightness(0) invert(1)}
+.sec{padding:1rem 1rem .25rem}
+.sec-l{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.35);padding:0 .5rem .5rem}
+.lk{display:flex;align-items:center;gap:.75rem;padding:.65rem .75rem;border-radius:8px;color:rgba(255,255,255,.7);font-size:.875rem;font-weight:500;margin-bottom:2px;cursor:pointer}
+.lk i{font-size:1rem;width:20px}
+.lk:hover{background:rgba(255,255,255,.06);color:#fff}
+.lk.active{background:var(--gold);color:var(--blue)}
+.note{padding:24px;color:var(--fg-2);font-size:13px;line-height:1.6}
+.note b{color:var(--fg-1)}
+</style></head><body>
+<div class="sb">
+  <div class="brand"><img src="../assets/logo--invert.svg" alt="Elect"></div>
+  <div class="sec"><div class="sec-l">Workspace</div>
+    <div class="lk active"><i class="bi bi-grid-1x2"></i>Dashboard</div>
+    <div class="lk"><i class="bi bi-bullseye"></i>Targets</div>
+    <div class="lk"><i class="bi bi-clipboard-data"></i>Evidence</div>
+  </div>
+  <div class="sec"><div class="sec-l">Procurement</div>
+    <div class="lk"><i class="bi bi-basket"></i>Plan Builder</div>
+    <div class="lk"><i class="bi bi-people"></i>Partners</div>
+  </div>
+</div>
+<div class="note">
+  <b>260 px fixed width</b> · navy <code>#03252F</code><br>
+  Active link = solid gold pill, navy text<br>
+  Hover = 6% white tint background<br>
+  Section labels = 10.4 px tracked uppercase, 35% white
+</div>
+</body></html>

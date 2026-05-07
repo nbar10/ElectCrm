@@ -1,0 +1,16 @@
+@* KpiCard.razor — KPI tile: tinted icon block + serif numeral + label *@
+
+<div class="kpi">
+    <div class="kpi-icon @Tone"><i class="bi @Icon"></i></div>
+    <div>
+        <div class="kpi-value">@Value</div>
+        <div class="kpi-label">@Label</div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter] public string Tone { get; set; } = "gold"; // gold | green | blue | amber
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+}

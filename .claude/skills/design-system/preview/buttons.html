@@ -1,0 +1,22 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+html,body{margin:0;background:var(--bg-page);color:var(--fg-1);font-family:var(--font-body)}
+body{padding:28px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.btn{display:inline-block;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:14px 32px;cursor:pointer;border:none;border-radius:6px;font-family:var(--font-body);transition:all .2s}
+.gold{background:var(--gold);color:var(--blue)}
+.gold:hover{background:var(--gold-hover);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.outline{background:transparent;color:var(--gold);border:1.5px solid var(--gold)}
+.outline:hover{background:var(--gold-15);border-color:var(--gold-hover);color:var(--gold-hover)}
+.dark{background:var(--blue);color:#fff}
+.dark:hover{background:var(--blue-light);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.light{background:#fff;color:var(--blue);border:1px solid var(--border-1)}
+.light:hover{background:var(--offwhite);border-color:var(--border-2);color:var(--blue-light)}
+.sm{padding:8px 20px;font-size:12px}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-2);font-weight:600;width:80px}
+</style></head><body>
+<div class="row"><div class="lbl">Primary</div><button class="btn gold">Take the Pledge</button><button class="btn dark">Sign In</button></div>
+<div class="row"><div class="lbl">Secondary</div><button class="btn outline">Learn More</button><button class="btn light">Cancel</button></div>
+<div class="row"><div class="lbl">Small</div><button class="btn gold sm">Add to Plan</button><button class="btn light sm">Edit</button></div>
+</body></html>
