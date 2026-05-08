@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
 # User-specific files
 *.rsuser
 *.suo

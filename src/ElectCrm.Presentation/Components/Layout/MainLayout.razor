@@ -1,19 +1,38 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@using ElectCrm.Infrastructure.Persistence
+@using Microsoft.EntityFrameworkCore
+@inject ElectCrmDbContext DbContext
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<div class="shell">
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+    <aside class="shell-sidebar">
+        <div class="shell-sidebar-brand">
+            <span class="shell-brand-mark">Elect</span>
+            <span class="shell-brand-sub">CRM</span>
         </div>
 
-        <article class="content px-4">
+        <nav class="shell-nav" aria-label="Main navigation">
+            <NavLink class="shell-nav-item" href="/app" Match="NavLinkMatch.All">
+                Home
+            </NavLink>
+            @* nav items added here as features land *@
+        </nav>
+    </aside>
+
+    <div class="shell-main">
+        <header class="shell-header">
+            <span class="shell-header-tenant">@_tenantName</span>
+            <div class="shell-header-sep" role="separator" aria-hidden="true"></div>
+            <span class="shell-header-user">@_userName</span>
+            <div class="shell-header-sep" role="separator" aria-hidden="true"></div>
+            <a href="/account/logout" class="shell-header-logout">Sign out</a>
+        </header>
+
+        <main class="shell-content" id="main-content">
             @Body
-        </article>
-    </main>
+        </main>
+    </div>
+
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>
@@ -21,3 +40,21 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private string _userName = string.Empty;
+    private string _tenantName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        _userName = auth.User.Identity?.Name ?? string.Empty;
+
+        _tenantName = await DbContext.AgencyBrands
+            .Select(b => b.TradingName)
+            .FirstOrDefaultAsync() ?? string.Empty;
+    }
+}

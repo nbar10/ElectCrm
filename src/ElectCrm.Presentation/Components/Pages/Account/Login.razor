@@ -1,0 +1,104 @@
+@page "/"
+@page "/account/login"
+@layout AuthLayout
+@using ElectCrm.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+@inject ILogger<Login> Logger
+
+<div class="auth-card">
+    <div class="auth-brand">
+        <span class="auth-brand-mark">Elect</span>
+        <span class="auth-brand-sub">CRM Platform</span>
+    </div>
+
+    <h1 class="auth-heading">Sign in to your account</h1>
+
+    @if (_errorMessage is not null)
+    {
+        <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+    }
+
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginAsync" FormName="login">
+        <DataAnnotationsValidator />
+
+        <div class="elect-field">
+            <label class="elect-label" for="email">Email address</label>
+            <InputText id="email"
+                       @bind-Value="Input.Email"
+                       class="elect-input"
+                       autocomplete="username"
+                       placeholder="you@example.com" />
+            <ValidationMessage For="() => Input.Email" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="password">Password</label>
+            <InputText id="password"
+                       @bind-Value="Input.Password"
+                       type="password"
+                       class="elect-input"
+                       autocomplete="current-password"
+                       placeholder="••••••••••" />
+            <ValidationMessage For="() => Input.Password" class="elect-validation-message" />
+        </div>
+
+        <button type="submit" class="btn-gold">Sign in</button>
+    </EditForm>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm]
+    private LoginInput Input { get; set; } = new();
+
+    private string? _errorMessage;
+
+    private async Task LoginAsync()
+    {
+        var result = await SignInManager.PasswordSignInAsync(
+            Input.Email ?? string.Empty,
+            Input.Password ?? string.Empty,
+            isPersistent: false,
+            lockoutOnFailure: true);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User {Email} signed in", Input.Email);
+            NavigationManager.NavigateTo(SafeReturnUrl());
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("Account locked out for {Email}", Input.Email);
+            _errorMessage = "This account has been locked. Please try again later.";
+        }
+        else
+        {
+            _errorMessage = "Invalid email or password.";
+        }
+    }
+
+    private string SafeReturnUrl()
+    {
+        if (!string.IsNullOrEmpty(ReturnUrl) &&
+            ReturnUrl.StartsWith('/') &&
+            !ReturnUrl.StartsWith("//") &&
+            !ReturnUrl.StartsWith("/\\"))
+        {
+            return ReturnUrl;
+        }
+        return "/app";
+    }
+
+    public sealed class LoginInput
+    {
+        [Required, EmailAddress]
+        public string? Email { get; set; }
+
+        [Required]
+        public string? Password { get; set; }
+    }
+}

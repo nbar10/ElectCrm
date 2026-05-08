@@ -1,0 +1,394 @@
+/* ============================================================
+   Elect Brand Tokens
+   ============================================================ */
+:root {
+    --gold:          #C2AE92;
+    --gold-hover:    #B09980;
+    --gold-light:    #EDE8E1;
+    --blue:          #03252F;
+    --blue-hover:    #041F27;
+    --offwhite:      #F3F1EE;
+
+    --fg-1:          #1A1A1A;
+    --fg-2:          #5C5751;
+
+    --bg-page:       #F3F1EE;
+    --bg-surface:    #FFFFFF;
+
+    --border-1:      #DDD8D0;
+    --border-2:      #C5BFB7;
+
+    --success:       #2D7A3A;
+    --success-bg:    #EBF5ED;
+    --warning:       #8A5E00;
+    --warning-bg:    #FEF6E4;
+    --error:         #B0291F;
+    --error-bg:      #FDECEA;
+    --info:          #03252F;
+    --info-bg:       #E8F0F2;
+
+    --font-body:     'DM Sans', system-ui, sans-serif;
+    --font-headline: 'Akzidenz Grotesk BE EX', 'DM Sans', system-ui, sans-serif;
+    --font-display:  'Moneta', 'DM Sans', system-ui, sans-serif;
+
+    --radius-sm:     4px;
+    --radius-md:     6px;
+    --radius-lg:     10px;
+
+    --shadow-sm:     0 1px 3px rgba(3, 37, 47, 0.08);
+    --shadow-md:     0 4px 16px rgba(3, 37, 47, 0.10);
+    --shadow-lg:     0 12px 40px rgba(3, 37, 47, 0.14);
+
+    --space-1:  0.25rem;
+    --space-2:  0.5rem;
+    --space-3:  0.75rem;
+    --space-4:  1rem;
+    --space-5:  1.25rem;
+    --space-6:  1.5rem;
+    --space-8:  2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+}
+
+/* ============================================================
+   Auth Layout
+   ============================================================ */
+.auth-page {
+    min-height: 100vh;
+    background-color: var(--bg-page);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    font-family: var(--font-body);
+}
+
+.auth-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-1);
+    border-radius: var(--radius-lg);
+    padding: var(--space-10) var(--space-8);
+    width: 100%;
+    max-width: 420px;
+    box-shadow: var(--shadow-md);
+}
+
+.auth-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: var(--space-8);
+    gap: var(--space-2);
+}
+
+.auth-brand-mark {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--blue);
+    text-transform: uppercase;
+}
+
+.auth-brand-sub {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    color: var(--fg-2);
+    text-transform: uppercase;
+}
+
+.auth-heading {
+    font-family: var(--font-headline);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--fg-1);
+    margin: 0 0 var(--space-6) 0;
+}
+
+/* ============================================================
+   Form Elements
+   ============================================================ */
+.elect-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-bottom: var(--space-4);
+}
+
+.elect-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--fg-1);
+    letter-spacing: 0.01em;
+}
+
+.elect-input {
+    width: 100%;
+    padding: var(--space-3) var(--space-3);
+    border: 1px solid var(--border-1);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    color: var(--fg-1);
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    box-sizing: border-box;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    outline: none;
+}
+
+.elect-input:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(194, 174, 146, 0.25);
+}
+
+.elect-input.invalid {
+    border-color: var(--error);
+    outline: none;
+}
+
+.elect-input:disabled,
+.elect-input[readonly] {
+    background: var(--gold-light);
+    color: var(--fg-2);
+    cursor: default;
+}
+
+.elect-validation-message {
+    font-size: 0.8125rem;
+    color: var(--error);
+    margin: 0;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn-gold {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    background: var(--gold);
+    color: var(--blue);
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+}
+
+.btn-gold:hover {
+    background: var(--gold-hover);
+}
+
+.btn-gold:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ============================================================
+   Alert Banners
+   ============================================================ */
+.elect-alert {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    margin-bottom: var(--space-4);
+}
+
+.elect-alert-error {
+    background: var(--error-bg);
+    color: var(--error);
+    border: 1px solid rgba(176, 41, 31, 0.2);
+}
+
+.elect-alert-success {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid rgba(45, 122, 58, 0.2);
+}
+
+/* ============================================================
+   App Shell
+   ============================================================ */
+:root {
+    --shell-sidebar-width:      240px;
+    --shell-header-height:      56px;
+
+    --shell-sidebar-bg:         var(--blue);
+    --shell-nav-fg:             rgba(255, 255, 255, 0.72);
+    --shell-nav-fg-hover:       rgba(255, 255, 255, 0.92);
+    --shell-nav-fg-active:      #FFFFFF;
+    --shell-nav-active-bg:      rgba(194, 174, 146, 0.12);
+    --shell-nav-active-border:  var(--gold);
+
+    --shell-header-bg:          var(--bg-surface);
+    --shell-header-border:      var(--border-1);
+}
+
+.shell {
+    display: grid;
+    grid-template-columns: var(--shell-sidebar-width) 1fr;
+    min-height: 100vh;
+}
+
+/* ---- Sidebar ---- */
+.shell-sidebar {
+    background: var(--shell-sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.shell-sidebar-brand {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-6) var(--space-5);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.shell-brand-mark {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: #FFFFFF;
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+.shell-brand-sub {
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    text-transform: uppercase;
+}
+
+.shell-nav {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-3) 0;
+    flex: 1;
+}
+
+.shell-nav-item {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 var(--space-5);
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    font-weight: 450;
+    color: var(--shell-nav-fg);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+    white-space: nowrap;
+}
+
+.shell-nav-item:hover {
+    color: var(--shell-nav-fg-hover);
+    background: rgba(255, 255, 255, 0.05);
+    text-decoration: none;
+}
+
+.shell-nav-item.active {
+    color: var(--shell-nav-fg-active);
+    background: var(--shell-nav-active-bg);
+    border-left-color: var(--shell-nav-active-border);
+    font-weight: 500;
+}
+
+/* ---- Main area ---- */
+.shell-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-width: 0;
+}
+
+/* ---- Header ---- */
+.shell-header {
+    position: sticky;
+    top: 0;
+    height: var(--shell-header-height);
+    background: var(--shell-header-bg);
+    border-bottom: 1px solid var(--shell-header-border);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 var(--space-6);
+    gap: var(--space-4);
+    z-index: 50;
+    flex-shrink: 0;
+}
+
+.shell-header-tenant {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--fg-2);
+    letter-spacing: 0.01em;
+}
+
+.shell-header-user {
+    font-size: 0.8125rem;
+    color: var(--fg-1);
+}
+
+.shell-header-sep {
+    width: 1px;
+    height: 14px;
+    background: var(--border-1);
+    flex-shrink: 0;
+}
+
+.shell-header-logout {
+    font-size: 0.8125rem;
+    color: var(--fg-2);
+    text-decoration: none;
+    transition: color 120ms ease;
+}
+
+.shell-header-logout:hover {
+    color: var(--fg-1);
+    text-decoration: none;
+}
+
+/* ---- Content ---- */
+.shell-content {
+    flex: 1;
+    padding: var(--space-8) var(--space-6);
+    background: var(--bg-page);
+    min-width: 0;
+}
+
+/* ============================================================
+   Auth Footer Link
+   ============================================================ */
+.auth-footer {
+    margin-top: var(--space-6);
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--fg-2);
+}
+
+.auth-link {
+    color: var(--blue);
+    text-decoration: underline;
+    text-decoration-color: var(--gold);
+    text-underline-offset: 2px;
+}
+
+.auth-link:hover {
+    color: var(--blue-hover);
+}

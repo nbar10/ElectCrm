@@ -1,0 +1,9 @@
+@inject NavigationManager NavigationManager
+
+@code {
+    protected override void OnInitialized()
+    {
+        var encodedUrl = Uri.EscapeDataString(NavigationManager.Uri);
+        NavigationManager.NavigateTo($"/account/login?returnUrl={encodedUrl}");
+    }
+}

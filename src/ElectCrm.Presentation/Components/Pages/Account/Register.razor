@@ -1,0 +1,200 @@
+@page "/account/register"
+@layout AuthLayout
+@using ElectCrm.Domain.Users
+@using ElectCrm.Infrastructure.Identity
+@using ElectCrm.Infrastructure.Persistence
+@using ElectCrm.Shared
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ElectCrmDbContext DbContext
+@inject NavigationManager NavigationManager
+@inject ILogger<Register> Logger
+
+<div class="auth-card">
+    <div class="auth-brand">
+        <span class="auth-brand-mark">Elect</span>
+        <span class="auth-brand-sub">CRM Platform</span>
+    </div>
+
+    <h1 class="auth-heading">Create your account</h1>
+
+    @if (_errorMessage is not null)
+    {
+        <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+    }
+
+    @if (_invite is null && _errorMessage is null)
+    {
+        <p style="color: var(--fg-2); font-size: 0.9375rem;">Validating invite…</p>
+    }
+    else if (_invite is not null)
+    {
+        <EditForm Model="Input" method="post" OnValidSubmit="RegisterAsync" FormName="register">
+            <DataAnnotationsValidator />
+
+            <input type="hidden" name="Input.Token" value="@Input.Token" />
+
+            <div class="elect-field">
+                <label class="elect-label">Email address</label>
+                <input class="elect-input" value="@_invite.InvitedEmail" readonly />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="fullName">Full name</label>
+                <InputText id="fullName"
+                           @bind-Value="Input.FullName"
+                           class="elect-input"
+                           autocomplete="name"
+                           placeholder="Your full name" />
+                <ValidationMessage For="() => Input.FullName" class="elect-validation-message" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="password">Password</label>
+                <InputText id="password"
+                           @bind-Value="Input.Password"
+                           type="password"
+                           class="elect-input"
+                           autocomplete="new-password"
+                           placeholder="Min. 10 characters" />
+                <ValidationMessage For="() => Input.Password" class="elect-validation-message" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="confirmPassword">Confirm password</label>
+                <InputText id="confirmPassword"
+                           @bind-Value="Input.ConfirmPassword"
+                           type="password"
+                           class="elect-input"
+                           autocomplete="new-password"
+                           placeholder="••••••••••" />
+                <ValidationMessage For="() => Input.ConfirmPassword" class="elect-validation-message" />
+            </div>
+
+            <button type="submit" class="btn-gold">Create account</button>
+        </EditForm>
+    }
+
+    <div class="auth-footer">
+        Already have an account? <a href="/account/login" class="auth-link">Sign in</a>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? Token { get; set; }
+
+    [SupplyParameterFromForm]
+    private RegisterInput Input { get; set; } = new();
+
+    private UserInvite? _invite;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Token comes from query string on GET, or from hidden field on POST.
+        var tokenStr = Token ?? Input.Token;
+
+        if (!Guid.TryParse(tokenStr, out var tokenGuid))
+        {
+            _errorMessage = "Invalid or missing invite link. Please request a new invitation.";
+            return;
+        }
+
+        Input.Token ??= tokenStr;
+
+        _invite = await DbContext.UserInvites
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(i => i.Token == tokenGuid);
+
+        if (_invite is null || _invite.Status != UserInviteStatus.Pending || DateTimeOffset.UtcNow > _invite.ExpiresAt)
+        {
+            _invite = null;
+            _errorMessage = "This invitation is invalid or has expired. Please request a new one.";
+        }
+    }
+
+    private async Task RegisterAsync()
+    {
+        if (_invite is null)
+        {
+            _errorMessage = "Invalid invitation.";
+            return;
+        }
+
+        await using var tx = await DbContext.Database.BeginTransactionAsync();
+
+        // Reload from the DB inside the transaction to get the current committed state.
+        // This prevents two concurrent submissions from both passing the Pending check
+        // that happened earlier in OnInitializedAsync.
+        await DbContext.Entry(_invite).ReloadAsync();
+
+        if (_invite.Status != UserInviteStatus.Pending || DateTimeOffset.UtcNow > _invite.ExpiresAt)
+        {
+            _errorMessage = "This invitation is no longer valid.";
+            return;
+        }
+
+        // Accept BEFORE creating any users — if Accept fails, nothing is persisted
+        // and the transaction rolls back on disposal.
+        var acceptResult = _invite.Accept();
+        if (acceptResult.IsFailure)
+        {
+            _errorMessage = acceptResult.Error.Message;
+            return;
+        }
+
+        var tenantId = new TenantId(_invite.AgencyBrandId);
+        var userResult = User.Create(tenantId, Input.FullName!, _invite.InvitedEmail);
+        if (userResult.IsFailure)
+        {
+            _errorMessage = userResult.Error.Message;
+            return;
+        }
+
+        var domainUser = userResult.Value;
+        DbContext.Users.Add(domainUser);
+
+        // UserManager.CreateAsync calls SaveChangesAsync internally, flushing the domain
+        // user and the accepted invite state within the open transaction.
+        var appUser = new ApplicationUser
+        {
+            DomainUserId = domainUser.Id,
+            Email = _invite.InvitedEmail,
+            UserName = _invite.InvitedEmail,
+        };
+
+        var createResult = await UserManager.CreateAsync(appUser, Input.Password!);
+        if (!createResult.Succeeded)
+        {
+            _errorMessage = string.Join(" ", createResult.Errors.Select(e => e.Description));
+            return;
+        }
+
+        await tx.CommitAsync();
+
+        Logger.LogInformation("New user {Email} registered for brand {BrandId}", _invite.InvitedEmail, _invite.AgencyBrandId);
+
+        await SignInManager.SignInAsync(appUser, isPersistent: false);
+        NavigationManager.NavigateTo("/app");
+    }
+
+    public sealed class RegisterInput
+    {
+        [Required]
+        public string? Token { get; set; }
+
+        [Required, MaxLength(200)]
+        public string? FullName { get; set; }
+
+        [Required, MinLength(10)]
+        [DataType(DataType.Password)]
+        public string? Password { get; set; }
+
+        [Required, DataType(DataType.Password)]
+        [Compare(nameof(Password), ErrorMessage = "Passwords do not match.")]
+        public string? ConfirmPassword { get; set; }
+    }
+}

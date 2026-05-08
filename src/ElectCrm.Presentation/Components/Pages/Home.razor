@@ -1,7 +1,19 @@
-﻿@page "/"
+@page "/app"
+@attribute [Authorize]
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Home — Elect CRM</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Welcome, @_displayName</h1>
 
-Welcome to your new app.
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private string _displayName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        _displayName = auth.User.Identity?.Name ?? "User";
+    }
+}
