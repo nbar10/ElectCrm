@@ -5,7 +5,11 @@
       "Bash(dotnet new *)",
       "Bash(dotnet sln add *)",
       "Bash(dotnet user-secrets init *)",
-      "Bash(dotnet build *)"
+      "Bash(dotnet build *)",
+      "Bash(dotnet ef migrations *)",
+      "Bash(dotnet ef database *)",
+      "Bash(dotnet user-secrets set *)",
+      "Bash(git *)"
     ]
   }
 }

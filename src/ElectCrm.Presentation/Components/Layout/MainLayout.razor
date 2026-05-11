@@ -1,7 +1,7 @@
 @inherits LayoutComponentBase
 @using ElectCrm.Infrastructure.Persistence
 @using Microsoft.EntityFrameworkCore
-@inject ElectCrmDbContext DbContext
+@inject IDbContextFactory<ElectCrmDbContext> DbContextFactory
 
 <div class="shell">
 
@@ -13,9 +13,20 @@
 
         <nav class="shell-nav" aria-label="Main navigation">
             <NavLink class="shell-nav-item" href="/app" Match="NavLinkMatch.All">
+                <svg class="shell-nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 9.5L10 3l7 6.5V17a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/>
+                    <path d="M7.5 18v-6h5v6"/>
+                </svg>
                 Home
             </NavLink>
-            @* nav items added here as features land *@
+            <NavLink class="shell-nav-item" href="/app/contacts">
+                <svg class="shell-nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="8.5" cy="6" r="3"/>
+                    <path d="M2 17c0-3.038 2.91-5.5 6.5-5.5s6.5 2.462 6.5 5.5"/>
+                    <path d="M14 3.5a3 3 0 010 5M17.5 17c0-2.2-1.6-4.05-3.8-4.8"/>
+                </svg>
+                Contacts
+            </NavLink>
         </nav>
     </aside>
 
@@ -53,7 +64,8 @@
         var auth = await AuthState;
         _userName = auth.User.Identity?.Name ?? string.Empty;
 
-        _tenantName = await DbContext.AgencyBrands
+        await using var db = await DbContextFactory.CreateDbContextAsync();
+        _tenantName = await db.AgencyBrands
             .Select(b => b.TradingName)
             .FirstOrDefaultAsync() ?? string.Empty;
     }

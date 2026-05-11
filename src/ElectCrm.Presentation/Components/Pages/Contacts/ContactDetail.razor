@@ -1,0 +1,141 @@
+@rendermode InteractiveServer
+@page "/app/contacts/{Id:guid}"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject ContactService ContactService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_contact?.FullName ?? "Contact") — Elect CRM</PageTitle>
+
+<a href="/app/contacts" class="back-link">← Contacts</a>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_confirmDelete)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg">Delete @_contact?.FullName? This cannot be undone.</span>
+        <button class="btn-danger" @onclick="ConfirmDeleteAsync">Delete</button>
+        <button class="btn-outline" @onclick="() => _confirmDelete = false">Cancel</button>
+    </div>
+}
+
+@if (_contact is not null)
+{
+    <div class="elect-detail-card">
+        <div class="elect-contact-header">
+            <div class="elect-avatar">@_initials</div>
+            <div class="elect-contact-header-info">
+                <h1 class="elect-contact-name">@_contact.FullName</h1>
+                @if (_contact.RoleTitle is not null)
+                {
+                    <p class="elect-contact-role">@_contact.RoleTitle</p>
+                }
+            </div>
+            <span class="elect-badge @(_contact.Status == ContactStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
+                @_contact.Status
+            </span>
+        </div>
+
+        <div class="elect-detail-body">
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Email</span>
+                <span class="elect-detail-value">
+                    @if (_contact.Email is not null)
+                    {
+                        <a href="mailto:@_contact.Email" class="elect-detail-link">@_contact.Email</a>
+                    }
+                    else
+                    {
+                        <text>—</text>
+                    }
+                </span>
+
+                <span class="elect-detail-label">Phone</span>
+                <span class="elect-detail-value">
+                    @if (_contact.Phone is not null)
+                    {
+                        <a href="tel:@_contact.Phone" class="elect-detail-link">@_contact.Phone</a>
+                    }
+                    else
+                    {
+                        <text>—</text>
+                    }
+                </span>
+
+                <span class="elect-detail-label">Categories</span>
+                <span class="elect-detail-value">
+                    @(string.Join(", ", _contact.PrimaryForCategories.Select(c => FormatCategory(c))))
+                </span>
+
+                @if (_contact.CommunicationPreferences is not null)
+                {
+                    <span class="elect-detail-label">Channel</span>
+                    <span class="elect-detail-value">@_contact.CommunicationPreferences.Channel</span>
+
+                    @if (!string.IsNullOrWhiteSpace(_contact.CommunicationPreferences.PreferredDays))
+                    {
+                        <span class="elect-detail-label">Preferred days</span>
+                        <span class="elect-detail-value">@_contact.CommunicationPreferences.PreferredDays</span>
+                    }
+                }
+
+                <span class="elect-detail-label">Added</span>
+                <span class="elect-detail-value">@_contact.CreatedAt.ToString("d MMM yyyy")</span>
+            </div>
+
+            <div class="elect-detail-actions">
+                <a href="/app/contacts/@Id/edit" class="btn-dark">Edit</a>
+                <button class="btn-danger" @onclick="() => _confirmDelete = true">Delete</button>
+                <a href="/app/contacts" class="btn-outline">Back to list</a>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ContactDto? _contact;
+    private string _initials = string.Empty;
+    private string? _errorMessage;
+    private bool _confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await ContactService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/contacts");
+            return;
+        }
+
+        _contact = result.Value;
+        _initials = string.Concat(
+            _contact.FullName
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Take(2)
+                .Select(w => char.ToUpperInvariant(w[0])));
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        var result = await ContactService.DeleteAsync(Id, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo("/app/contacts");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _confirmDelete = false;
+        }
+    }
+
+    private static string FormatCategory(ContactCategory c) =>
+        System.Text.RegularExpressions.Regex.Replace(c.ToString(), "([A-Z])", " $1").Trim();
+}

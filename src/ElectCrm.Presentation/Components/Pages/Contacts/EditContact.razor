@@ -1,0 +1,94 @@
+@rendermode InteractiveServer
+@page "/app/contacts/{Id:guid}/edit"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject ContactService ContactService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit Contact — Elect CRM</PageTitle>
+
+<a href="/app/contacts/@Id" class="back-link">← Contact</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Edit Contact</h1>
+</div>
+
+@if (_notFound)
+{
+    <div class="elect-alert elect-alert-error">Contact not found.</div>
+}
+else if (_command is not null)
+{
+    <div class="elect-form-card">
+        <ContactForm Model="_command"
+                     OnValidSubmit="HandleSubmit"
+                     IsSubmitting="_isSubmitting"
+                     ErrorMessage="_errorMessage"
+                     SubmitLabel="Save Changes"
+                     CancelHref="@($"/app/contacts/{Id}")" />
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private CreateContactCommand? _command;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private bool _notFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await ContactService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _command = ToCommand(result.Value);
+    }
+
+    private async Task HandleSubmit(CreateContactCommand command)
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        var update = new UpdateContactCommand
+        {
+            FullName = command.FullName,
+            RoleTitle = command.RoleTitle,
+            Email = command.Email,
+            Phone = command.Phone,
+            PrimaryForCategories = command.PrimaryForCategories,
+            CommunicationPreferences = command.CommunicationPreferences,
+        };
+
+        var result = await ContactService.UpdateAsync(Id, update, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/contacts/{Id}");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+
+    private static CreateContactCommand ToCommand(ContactDto dto) => new()
+    {
+        ClientId = dto.ClientId,
+        FullName = dto.FullName,
+        RoleTitle = dto.RoleTitle,
+        Email = dto.Email,
+        Phone = dto.Phone,
+        PrimaryForCategories = [..dto.PrimaryForCategories],
+        CommunicationPreferences = dto.CommunicationPreferences is null ? null : new ChannelPrefsCommand(
+            dto.CommunicationPreferences.Channel,
+            dto.CommunicationPreferences.PreferredDays,
+            dto.CommunicationPreferences.QuietHoursStart,
+            dto.CommunicationPreferences.QuietHoursEnd),
+    };
+}

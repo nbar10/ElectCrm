@@ -1,0 +1,203 @@
+@* Non-routable form component — no @page directive, inherits rendermode from parent *@
+
+@if (ErrorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@ErrorMessage</div>
+}
+
+<EditForm Model="_form" OnValidSubmit="HandleValidSubmit">
+    <DataAnnotationsValidator />
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Identity</p>
+
+        <div class="elect-field">
+            <label class="elect-label">Client ID</label>
+            <InputText class="elect-input"
+                       @bind-Value="_form.ClientIdText"
+                       placeholder="00000000-0000-0000-0000-000000000000" />
+            <ValidationMessage For="() => _form.ClientId" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="fullName">Full Name <span aria-hidden="true">*</span></label>
+            <InputText id="fullName" class="elect-input" @bind-Value="_form.FullName" placeholder="Jane Smith" />
+            <ValidationMessage For="() => _form.FullName" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="roleTitle">Role Title</label>
+            <InputText id="roleTitle" class="elect-input" @bind-Value="_form.RoleTitle" placeholder="Site Manager" />
+            <ValidationMessage For="() => _form.RoleTitle" class="elect-validation-message" />
+        </div>
+    </div>
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Contact Details</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="email">Email</label>
+            <InputText id="email" class="elect-input" @bind-Value="_form.Email" placeholder="jane@example.com" />
+            <ValidationMessage For="() => _form.Email" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="phone">Phone (E.164)</label>
+            <InputText id="phone" class="elect-input" @bind-Value="_form.Phone" placeholder="+447700000000" />
+            <ValidationMessage For="() => _form.Phone" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="categories">Primary Categories</label>
+            <select id="categories" multiple class="elect-input"
+                    @onchange="OnCategoriesChanged" style="height: auto; min-height: 120px;">
+                @foreach (var cat in Enum.GetValues<ContactCategory>())
+                {
+                    <option value="@cat" selected="@(_form.SelectedCategories.Contains(cat))">
+                        @FormatCategory(cat)
+                    </option>
+                }
+            </select>
+            <small style="color: var(--fg-2); font-size: 0.8125rem;">Hold Ctrl/Cmd to select multiple</small>
+        </div>
+    </div>
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Communication</p>
+
+        <div class="elect-field" style="flex-direction: row; align-items: center; gap: var(--space-3);">
+            <InputCheckbox @bind-Value="_form.HasCommunicationPrefs" id="hasPrefs" />
+            <label class="elect-label" for="hasPrefs" style="margin: 0;">Set communication preferences</label>
+        </div>
+
+        @if (_form.HasCommunicationPrefs)
+        {
+            <div class="elect-field">
+                <label class="elect-label" for="channel">Preferred Channel</label>
+                <InputSelect id="channel" class="elect-input" @bind-Value="_form.Channel">
+                    @foreach (var ch in Enum.GetValues<PreferredChannel>())
+                    {
+                        <option value="@ch">@ch</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="quietStart">Quiet Hours Start</label>
+                <InputText id="quietStart" class="elect-input" @bind-Value="_form.QuietHoursStart" placeholder="09:00" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="quietEnd">Quiet Hours End</label>
+                <InputText id="quietEnd" class="elect-input" @bind-Value="_form.QuietHoursEnd" placeholder="17:00" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="preferredDays">Preferred Days</label>
+                <InputText id="preferredDays" class="elect-input" @bind-Value="_form.PreferredDays" placeholder="Monday,Wednesday,Friday" />
+            </div>
+        }
+    </div>
+
+    <div class="elect-form-actions">
+        <button type="submit" class="btn-gold-sm" disabled="@IsSubmitting">
+            @(IsSubmitting ? "Saving…" : SubmitLabel)
+        </button>
+        @if (CancelHref is not null)
+        {
+            <a href="@CancelHref" class="btn-outline">Cancel</a>
+        }
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public CreateContactCommand Model { get; set; } = new();
+    [Parameter, EditorRequired] public EventCallback<CreateContactCommand> OnValidSubmit { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public string SubmitLabel { get; set; } = "Save Contact";
+    [Parameter] public string? CancelHref { get; set; }
+
+    private sealed class FormModel
+    {
+        [NotEmptyGuid] public Guid ClientId { get; set; }
+
+        public string ClientIdText
+        {
+            get => ClientId == Guid.Empty ? string.Empty : ClientId.ToString();
+            set => ClientId = Guid.TryParse(value, out var g) ? g : ClientId;
+        }
+        [Required, MaxLength(200)] public string FullName { get; set; } = string.Empty;
+        [MaxLength(200)] public string? RoleTitle { get; set; }
+        [MaxLength(200), EmailAddress] public string? Email { get; set; }
+        [MaxLength(30)] public string? Phone { get; set; }
+        public HashSet<ContactCategory> SelectedCategories { get; set; } = [];
+        public bool HasCommunicationPrefs { get; set; }
+        public PreferredChannel Channel { get; set; } = PreferredChannel.NoPreference;
+        public string? PreferredDays { get; set; }
+        public string? QuietHoursStart { get; set; }
+        public string? QuietHoursEnd { get; set; }
+    }
+
+    private FormModel _form = new();
+    private CreateContactCommand? _lastModel;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastModel, Model))
+            return;
+
+        _lastModel = Model;
+        _form = new FormModel
+        {
+            ClientId = Model.ClientId,
+            FullName = Model.FullName,
+            RoleTitle = Model.RoleTitle,
+            Email = Model.Email,
+            Phone = Model.Phone,
+            SelectedCategories = [..Model.PrimaryForCategories],
+            HasCommunicationPrefs = Model.CommunicationPreferences is not null,
+            Channel = Model.CommunicationPreferences?.Channel ?? PreferredChannel.NoPreference,
+            PreferredDays = Model.CommunicationPreferences?.PreferredDays,
+            QuietHoursStart = Model.CommunicationPreferences?.QuietHoursStart?.ToString("HH:mm"),
+            QuietHoursEnd = Model.CommunicationPreferences?.QuietHoursEnd?.ToString("HH:mm"),
+        };
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        ChannelPrefsCommand? prefs = null;
+        if (_form.HasCommunicationPrefs)
+        {
+            TimeOnly.TryParse(_form.QuietHoursStart, out var qStart);
+            TimeOnly.TryParse(_form.QuietHoursEnd, out var qEnd);
+            prefs = new ChannelPrefsCommand(
+                _form.Channel,
+                _form.PreferredDays,
+                _form.QuietHoursStart is not null ? qStart : null,
+                _form.QuietHoursEnd is not null ? qEnd : null);
+        }
+
+        var command = new CreateContactCommand
+        {
+            ClientId = _form.ClientId,
+            FullName = _form.FullName,
+            RoleTitle = _form.RoleTitle,
+            Email = _form.Email,
+            Phone = _form.Phone,
+            PrimaryForCategories = [.._form.SelectedCategories],
+            CommunicationPreferences = prefs,
+        };
+
+        await OnValidSubmit.InvokeAsync(command);
+    }
+
+    private void OnCategoriesChanged(ChangeEventArgs e)
+    {
+        if (e.Value is string[] selected)
+            _form.SelectedCategories = [..selected.Select(s => Enum.Parse<ContactCategory>(s))];
+    }
+
+    private static string FormatCategory(ContactCategory c) =>
+        System.Text.RegularExpressions.Regex.Replace(c.ToString(), "([A-Z])", " $1").Trim();
+}

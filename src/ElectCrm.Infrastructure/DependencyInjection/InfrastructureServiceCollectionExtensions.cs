@@ -1,6 +1,7 @@
 namespace ElectCrm.Infrastructure.DependencyInjection;
 
 using ElectCrm.Domain.Common;
+using ElectCrm.Infrastructure.Features.Contacts;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Infrastructure.Persistence;
 using ElectCrm.Infrastructure.Services;
@@ -19,8 +20,9 @@ public static class InfrastructureServiceCollectionExtensions
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
-        services.AddDbContext<ElectCrmDbContext>(options =>
-            options.UseSqlServer(connectionString));
+        services.AddDbContextFactory<ElectCrmDbContext>(
+            options => options.UseSqlServer(connectionString),
+            ServiceLifetime.Scoped);
 
         services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
             {
@@ -35,6 +37,8 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ITenantContext, TenantContextAccessor>();
         services.AddScoped<IDomainEventDispatcher, NoOpDomainEventDispatcher>();
+
+        services.AddScoped<ContactService>();
 
         return services;
     }

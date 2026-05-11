@@ -1,0 +1,46 @@
+@rendermode InteractiveServer
+@page "/app/contacts/new"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject ContactService ContactService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Add Contact — Elect CRM</PageTitle>
+
+<a href="/app/contacts" class="back-link">← Contacts</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Add Contact</h1>
+</div>
+
+<div class="elect-form-card">
+    <ContactForm Model="_command"
+                 OnValidSubmit="HandleSubmit"
+                 IsSubmitting="_isSubmitting"
+                 ErrorMessage="_errorMessage"
+                 SubmitLabel="Create Contact"
+                 CancelHref="/app/contacts" />
+</div>
+
+@code {
+    private CreateContactCommand _command = new();
+    private bool _isSubmitting;
+    private string? _errorMessage;
+
+    private async Task HandleSubmit(CreateContactCommand command)
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        var result = await ContactService.CreateAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/contacts/{result.Value}");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+}
