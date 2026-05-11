@@ -2,6 +2,7 @@ namespace ElectCrm.Infrastructure.Persistence;
 
 using ElectCrm.Domain.AgencyBrands;
 using ElectCrm.Domain.Branches;
+using ElectCrm.Domain.Candidates;
 using ElectCrm.Domain.Common;
 using ElectCrm.Domain.Contacts;
 using ElectCrm.Domain.Persons;
@@ -25,6 +26,7 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
     public DbSet<Branch> Branches => Set<Branch>();
     public new DbSet<User> Users => Set<User>();
     public DbSet<UserInvite> UserInvites => Set<UserInvite>();
+    public DbSet<Candidate> Candidates => Set<Candidate>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<Person> Persons => Set<Person>();
 
@@ -58,6 +60,11 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
                  || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value);
 
         modelBuilder.Entity<Contact>().HasQueryFilter(
+            e => (_tenantContext.CurrentTenantId == TenantId.Empty
+                  || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value)
+                 && !e.IsDeleted);
+
+        modelBuilder.Entity<Candidate>().HasQueryFilter(
             e => (_tenantContext.CurrentTenantId == TenantId.Empty
                   || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value)
                  && !e.IsDeleted);

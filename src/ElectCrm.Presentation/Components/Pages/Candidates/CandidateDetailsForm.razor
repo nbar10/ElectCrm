@@ -1,0 +1,112 @@
+@* Non-routable form component — no @page directive, inherits rendermode from parent *@
+
+@if (ErrorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@ErrorMessage</div>
+}
+
+<EditForm Model="_form" OnValidSubmit="HandleValidSubmit">
+    <DataAnnotationsValidator />
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Candidate Details</p>
+
+        <div class="elect-field">
+            <label class="elect-label">Owner Consultant</label>
+            <input type="text" class="elect-input" placeholder="Consultant GUID (optional)"
+                   value="@_ownerIdRaw"
+                   @onchange="OnOwnerIdChanged" />
+            <small style="color: var(--fg-2); font-size: 0.8125rem;">Enter the consultant's user GUID. A consultant picker will replace this in a future update.</small>
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Primary Trade</label>
+            <InputText class="elect-input" @bind-Value="_form.PrimaryTrade" placeholder="e.g. Electrician" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Source</label>
+            <InputText class="elect-input" @bind-Value="_form.Source" placeholder="e.g. Indeed, Referral" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Source Legacy ID</label>
+            <InputText class="elect-input" @bind-Value="_form.SourceLegacyId" placeholder="Legacy system reference" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Notes</label>
+            <textarea class="elect-input" rows="4"
+                      value="@_form.Notes"
+                      @onchange="e => _form.Notes = e.Value?.ToString()"></textarea>
+        </div>
+    </div>
+
+    <div class="elect-form-actions">
+        <button type="submit" class="btn-gold-sm" disabled="@IsSubmitting">
+            @(IsSubmitting ? "Saving…" : SubmitLabel)
+        </button>
+        @if (CancelHref is not null)
+        {
+            <a href="@CancelHref" class="btn-outline">Cancel</a>
+        }
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public UpdateCandidateCommand Model { get; set; } = new();
+    [Parameter] public EventCallback<UpdateCandidateCommand> OnValidSubmit { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public string SubmitLabel { get; set; } = "Save";
+    [Parameter] public string? CancelHref { get; set; }
+
+    private sealed class FormModel
+    {
+        public Guid? OwnerConsultantId { get; set; }
+        public string? PrimaryTrade { get; set; }
+        public string? Source { get; set; }
+        public string? SourceLegacyId { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    private FormModel _form = new();
+    private string _ownerIdRaw = string.Empty;
+    private UpdateCandidateCommand? _lastModel;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastModel, Model))
+            return;
+
+        _lastModel = Model;
+        _form = new FormModel
+        {
+            OwnerConsultantId = Model.OwnerConsultantId,
+            PrimaryTrade = Model.PrimaryTrade,
+            Source = Model.Source,
+            SourceLegacyId = Model.SourceLegacyId,
+            Notes = Model.Notes,
+        };
+        _ownerIdRaw = Model.OwnerConsultantId?.ToString() ?? string.Empty;
+    }
+
+    private void OnOwnerIdChanged(ChangeEventArgs e)
+    {
+        _ownerIdRaw = e.Value?.ToString() ?? string.Empty;
+        _form.OwnerConsultantId = Guid.TryParse(_ownerIdRaw, out var g) ? g : null;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var command = new UpdateCandidateCommand
+        {
+            OwnerConsultantId = _form.OwnerConsultantId,
+            PrimaryTrade = _form.PrimaryTrade,
+            Source = _form.Source,
+            SourceLegacyId = _form.SourceLegacyId,
+            Notes = _form.Notes,
+        };
+        await OnValidSubmit.InvokeAsync(command);
+    }
+}

@@ -3,6 +3,7 @@ namespace ElectCrm.Presentation.Seeding;
 using System.Security.Claims;
 using ElectCrm.Application.Features.Persons;
 using ElectCrm.Domain.AgencyBrands;
+using ElectCrm.Domain.Candidates;
 using ElectCrm.Domain.Common.ValueObjects;
 using ElectCrm.Domain.Contacts;
 using ElectCrm.Domain.Persons;
@@ -55,6 +56,7 @@ public static class DatabaseSeeder
 
         await SeedContactsAsync(brand1, brand2, dbContext, logger);
         await SeedPersonsAsync(dbContext, hashing, logger);
+        await SeedCandidatesAsync(brand1, brand2, dbContext, logger);
 
         logger.LogInformation("Development seed complete");
     }
@@ -314,4 +316,91 @@ public static class DatabaseSeeder
         ("Daniel Torres",      new DateOnly(1981, 2, 28),  null,            "XY890123B", null),
         ("Amelia Foster",      new DateOnly(2000, 8, 3),   "+447700900010", null,        "123456010"),
     ];
+
+    private static async Task SeedCandidatesAsync(
+        AgencyBrand brand1,
+        AgencyBrand brand2,
+        ElectCrmDbContext dbContext,
+        ILogger logger)
+    {
+        var alreadySeeded = await dbContext.Candidates
+            .IgnoreQueryFilters()
+            .AnyAsync(c => c.AgencyBrandId == brand1.Id);
+
+        if (alreadySeeded)
+        {
+            logger.LogDebug("Candidate seed records already present — skipping");
+            return;
+        }
+
+        var persons = await dbContext.Persons
+            .Where(p => !p.IsDeleted)
+            .ToListAsync();
+
+        Domain.Persons.Person FindPerson(string name, DateOnly dob) =>
+            persons.FirstOrDefault(p => p.DisplayName == name && p.DateOfBirth == dob)
+            ?? throw new InvalidOperationException($"Seed failed — Person '{name}' ({dob:yyyy-MM-dd}) not found. Ensure person seed ran first.");
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // ── Brand 1 (Elect Group Demo) — 5 candidates ──────────────────────────
+        // Cross-brand: John Smith and Eleanor Whitfield appear under both brands.
+        // Brand-only:  Marcus Adeyemi, Priya Kapoor, Charlotte Davies.
+        // No candidates at all: Jon Smyth, Daniel Torres, Amelia Foster.
+        var brand1Seeds = new[]
+        {
+            (Person: FindPerson("John Smith",       new DateOnly(1985, 3,  14)), Trade: "Electrician",  Source: "Referral",   Status: CandidateStatus.Active,   RegDate: today.AddDays(-120)),
+            (Person: FindPerson("Eleanor Whitfield", new DateOnly(1990, 6,  20)), Trade: "Plumber",      Source: "Indeed",     Status: CandidateStatus.Active,   RegDate: today.AddDays(-90)),
+            (Person: FindPerson("Marcus Adeyemi",    new DateOnly(1978, 9,  5)),  Trade: "Scaffolder",   Source: "Walk-in",    Status: CandidateStatus.Active,   RegDate: today.AddDays(-60)),
+            (Person: FindPerson("Priya Kapoor",      new DateOnly(1995, 1,  30)), Trade: "Labourer",     Source: "Find a Job", Status: CandidateStatus.Active,   RegDate: today.AddDays(-45)),
+            (Person: FindPerson("Charlotte Davies",  new DateOnly(1988, 7,  17)), Trade: "Electrician",  Source: "Agency",     Status: CandidateStatus.Dormant,  RegDate: today.AddDays(-200)),
+        };
+
+        // ── Brand 2 (Test Industries Demo) — 4 candidates ─────────────────────
+        // Cross-brand: John Smith and Eleanor Whitfield re-appear here.
+        // Brand-only:  Rory MacPherson, Ingrid Karlsson.
+        var brand2Seeds = new[]
+        {
+            (Person: FindPerson("John Smith",       new DateOnly(1985, 3,  14)), Trade: "Electrician",  Source: "Referral",   Status: CandidateStatus.Active,   RegDate: today.AddDays(-115)),
+            (Person: FindPerson("Eleanor Whitfield", new DateOnly(1990, 6,  20)), Trade: "Plumber",      Source: "LinkedIn",   Status: CandidateStatus.Active,   RegDate: today.AddDays(-80)),
+            (Person: FindPerson("Rory MacPherson",   new DateOnly(1975, 4,  22)), Trade: "Joiner",       Source: "Walk-in",    Status: CandidateStatus.Active,   RegDate: today.AddDays(-30)),
+            (Person: FindPerson("Ingrid Karlsson",   new DateOnly(1993, 12, 8)),  Trade: "Labourer",     Source: "Find a Job", Status: CandidateStatus.Dormant,  RegDate: today.AddDays(-180)),
+        };
+
+        void AddCandidate(AgencyBrand brand, Domain.Persons.Person person, CandidateStatus status, DateOnly regDate, string trade, string source)
+        {
+            var result = Candidate.Create(
+                new TenantId(brand.Id),
+                person.Id,
+                regDate,
+                status,
+                ownerConsultantId: null,
+                primaryTrade: trade,
+                source: source,
+                sourceLegacyId: null,
+                notes: null);
+
+            if (result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — {result.Error.Message}");
+
+            dbContext.Candidates.Add(result.Value);
+            result.Value.ClearDomainEvents();
+        }
+
+        foreach (var s in brand1Seeds)
+            AddCandidate(brand1, s.Person, s.Status, s.RegDate, s.Trade, s.Source);
+
+        foreach (var s in brand2Seeds)
+            AddCandidate(brand2, s.Person, s.Status, s.RegDate, s.Trade, s.Source);
+
+        await dbContext.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Seeded {Total} candidates — {B1Count} for '{B1}', {B2Count} for '{B2}'. " +
+            "Cross-brand persons: John Smith, Eleanor Whitfield. " +
+            "No-candidate persons: Jon Smyth, Daniel Torres, Amelia Foster.",
+            brand1Seeds.Length + brand2Seeds.Length,
+            brand1Seeds.Length, brand1.TradingName,
+            brand2Seeds.Length, brand2.TradingName);
+    }
 }

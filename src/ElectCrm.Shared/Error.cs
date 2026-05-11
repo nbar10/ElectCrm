@@ -7,4 +7,5 @@ public readonly record struct Error(string Code, string Message)
     public static readonly Error NotFound = new("NotFound", "The requested resource was not found.");
 
     public static Error Validation(string message) => new("Validation", message);
+    public static Error Conflict(string message) => new("Conflict", message);
 }

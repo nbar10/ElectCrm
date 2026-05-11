@@ -578,6 +578,10 @@
     background: var(--border-1);
     color: var(--fg-2);
 }
+.elect-badge-warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
 
 /* Pagination */
 .elect-pagination {

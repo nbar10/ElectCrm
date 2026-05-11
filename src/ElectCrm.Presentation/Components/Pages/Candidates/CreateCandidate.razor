@@ -1,0 +1,236 @@
+@rendermode InteractiveServer
+@page "/app/candidates/new"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject CandidateService CandidateService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Add Candidate — Elect CRM</PageTitle>
+
+<a href="/app/candidates" class="back-link">← Candidates</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Add Candidate</h1>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">
+        @_errorMessage
+        @if (_existingCandidateId.HasValue)
+        {
+            <a href="/app/candidates/@_existingCandidateId.Value" style="margin-left: var(--space-2);">View existing candidate →</a>
+        }
+    </div>
+}
+
+@if (_mode == CreateMode.ChoosePath)
+{
+    <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-4);">
+        <button style="text-align: left; cursor: pointer; background: var(--bg-surface); border: 1px solid var(--border-1); border-radius: var(--radius-md); padding: var(--space-5); flex: 1 1 280px;"
+                @onclick="() => _mode = CreateMode.SearchPerson">
+            <p style="font-weight: 600; font-size: 1rem; color: var(--fg-1); margin: 0 0 var(--space-2);">Register existing person</p>
+            <p style="font-size: 0.875rem; color: var(--fg-2); margin: 0;">Find someone already in the system and register them as a candidate.</p>
+        </button>
+        <button style="text-align: left; cursor: pointer; background: var(--bg-surface); border: 1px solid var(--border-1); border-radius: var(--radius-md); padding: var(--space-5); flex: 1 1 280px;"
+                @onclick="() => _mode = CreateMode.NewPersonAndCandidate">
+            <p style="font-weight: 600; font-size: 1rem; color: var(--fg-1); margin: 0 0 var(--space-2);">Create new candidate</p>
+            <p style="font-size: 0.875rem; color: var(--fg-2); margin: 0;">Create a new person record and register them as a candidate at the same time.</p>
+        </button>
+    </div>
+}
+
+@if (_mode == CreateMode.SearchPerson)
+{
+    <div style="margin-bottom: var(--space-4);">
+        <button class="btn-outline" @onclick="() => { _mode = CreateMode.ChoosePath; _selectedPerson = null; _errorMessage = null; }">← Back</button>
+    </div>
+
+    <div class="page-header">
+        <h2 class="page-header-title" style="font-size: 1.25rem;">Step 2 — Find Person</h2>
+    </div>
+
+    <PersonSearchPanel OnPersonSelected="OnPersonSelected" ShowAlreadyRegisteredWarning="true" />
+}
+
+@if (_mode == CreateMode.RegisterExisting && _selectedPerson is not null)
+{
+    <div style="margin-bottom: var(--space-4);">
+        <button class="btn-outline" @onclick="() => { _mode = CreateMode.SearchPerson; _errorMessage = null; }">← Back</button>
+    </div>
+
+    <div class="elect-form-card">
+        <p class="elect-form-section-title">Register as Candidate</p>
+        <p style="font-weight: 600; color: var(--fg-1); margin-bottom: var(--space-4);">@_selectedPerson.DisplayName</p>
+
+        <div class="elect-form-section">
+            <div class="elect-field">
+                <label class="elect-label">Registration Date</label>
+                <input type="date" class="elect-input"
+                       value="@_fromPersonForm.RegistrationDateRaw"
+                       @onchange="e => _fromPersonForm.RegistrationDateRaw = e.Value?.ToString() ?? string.Empty" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label">Primary Trade</label>
+                <input type="text" class="elect-input" placeholder="e.g. Electrician"
+                       value="@_fromPersonForm.PrimaryTrade"
+                       @onchange="e => _fromPersonForm.PrimaryTrade = e.Value?.ToString()" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label">Source</label>
+                <input type="text" class="elect-input" placeholder="e.g. Indeed, Referral"
+                       value="@_fromPersonForm.Source"
+                       @onchange="e => _fromPersonForm.Source = e.Value?.ToString()" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label">Source Legacy ID</label>
+                <input type="text" class="elect-input" placeholder="Legacy system reference"
+                       value="@_fromPersonForm.SourceLegacyId"
+                       @onchange="e => _fromPersonForm.SourceLegacyId = e.Value?.ToString()" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label">Owner Consultant</label>
+                <input type="text" class="elect-input" placeholder="Consultant GUID (optional)"
+                       value="@_fromPersonForm.OwnerIdRaw"
+                       @onchange="e => _fromPersonForm.OwnerIdRaw = e.Value?.ToString() ?? string.Empty" />
+                <small style="color: var(--fg-2); font-size: 0.8125rem;">Enter consultant user GUID. A consultant picker will replace this in a future update.</small>
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label">Notes</label>
+                <textarea class="elect-input" rows="4"
+                          value="@_fromPersonForm.Notes"
+                          @onchange="e => _fromPersonForm.Notes = e.Value?.ToString()"></textarea>
+            </div>
+        </div>
+
+        <div class="elect-form-actions">
+            <button class="btn-gold-sm" @onclick="SubmitFromPersonAsync" disabled="@_isSubmitting">
+                @(_isSubmitting ? "Creating…" : "Register as Candidate")
+            </button>
+            <a href="/app/candidates" class="btn-outline">Cancel</a>
+        </div>
+    </div>
+}
+
+@if (_mode == CreateMode.NewPersonAndCandidate)
+{
+    <div style="margin-bottom: var(--space-4);">
+        <button class="btn-outline" @onclick="() => { _mode = CreateMode.ChoosePath; _errorMessage = null; }">← Back</button>
+    </div>
+
+    <div class="elect-form-card">
+        <CandidateWithNewPersonForm Model="_newPersonCommand"
+                                    OnValidSubmit="HandleNewPersonSubmit"
+                                    IsSubmitting="_isSubmitting"
+                                    ErrorMessage="_errorMessage" />
+    </div>
+}
+
+@code {
+    private enum CreateMode { ChoosePath, SearchPerson, RegisterExisting, NewPersonAndCandidate }
+    private CreateMode _mode = CreateMode.ChoosePath;
+
+    private sealed class FromPersonForm
+    {
+        public string RegistrationDateRaw { get; set; } = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+        public string? PrimaryTrade { get; set; }
+        public string? Source { get; set; }
+        public string? SourceLegacyId { get; set; }
+        public string OwnerIdRaw { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+
+        public DateOnly? RegistrationDateParsed =>
+            DateOnly.TryParse(RegistrationDateRaw, out var d) ? d : null;
+
+        public Guid? OwnerConsultantId =>
+            Guid.TryParse(OwnerIdRaw, out var g) ? g : null;
+    }
+
+    private PersonSearchResultDto? _selectedPerson;
+    private FromPersonForm _fromPersonForm = new();
+    private CreateCandidateWithNewPersonCommand _newPersonCommand = new();
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private Guid? _existingCandidateId;
+
+    private void OnPersonSelected(PersonSearchResultDto person)
+    {
+        _selectedPerson = person;
+        _fromPersonForm = new FromPersonForm();
+        _errorMessage = null;
+        _mode = CreateMode.RegisterExisting;
+    }
+
+    private async Task SubmitFromPersonAsync()
+    {
+        if (_selectedPerson is null)
+            return;
+
+        _isSubmitting = true;
+        _errorMessage = null;
+        _existingCandidateId = null;
+
+        var command = new CreateCandidateFromPersonCommand
+        {
+            PersonId = _selectedPerson.PersonId,
+            RegistrationDate = _fromPersonForm.RegistrationDateParsed,
+            OwnerConsultantId = _fromPersonForm.OwnerConsultantId,
+            PrimaryTrade = _fromPersonForm.PrimaryTrade,
+            Source = _fromPersonForm.Source,
+            SourceLegacyId = _fromPersonForm.SourceLegacyId,
+            Notes = _fromPersonForm.Notes,
+        };
+
+        var result = await CandidateService.CreateFromPersonAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _isSubmitting = false;
+            NavigationManager.NavigateTo($"/app/candidates/{result.Value}");
+            return;
+        }
+
+        if (result.Error.Code == "Conflict")
+        {
+            var existingResult = await CandidateService.FindExistingCandidateIdAsync(_selectedPerson.PersonId, CancellationToken.None);
+            if (existingResult.IsSuccess && existingResult.Value.HasValue)
+            {
+                _existingCandidateId = existingResult.Value.Value;
+                _errorMessage = "This person is already registered as a candidate at this brand.";
+            }
+            else
+            {
+                _errorMessage = result.Error.Message;
+            }
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isSubmitting = false;
+    }
+
+    private async Task HandleNewPersonSubmit(CreateCandidateWithNewPersonCommand command)
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+        _newPersonCommand = command;
+
+        var result = await CandidateService.CreateWithNewPersonAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _isSubmitting = false;
+            NavigationManager.NavigateTo($"/app/candidates/{result.Value}");
+            return;
+        }
+
+        _errorMessage = result.Error.Message;
+        _isSubmitting = false;
+    }
+}

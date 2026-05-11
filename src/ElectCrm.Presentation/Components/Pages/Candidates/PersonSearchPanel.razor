@@ -1,0 +1,159 @@
+@* Non-routable component — no @page directive, inherits rendermode from parent *@
+@inject CandidateService CandidateService
+@implements IDisposable
+
+@if (!string.IsNullOrWhiteSpace(_errorMessage))
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div style="margin-bottom: var(--space-4);">
+    <input type="text" class="elect-input" placeholder="Search by name (min 2 characters)…"
+           value="@_searchTerm" @oninput="OnSearchInput" style="max-width: 400px;" />
+</div>
+
+@if (_isLoading)
+{
+    <p>Searching…</p>
+}
+else if (_result is not null && _result.TotalCount == 0)
+{
+    <div class="elect-empty-state">
+        <p class="elect-empty-state-body">No matching persons found. You may want to create a new candidate instead.</p>
+    </div>
+}
+else if (_result is not null)
+{
+    <div style="border: 1px solid var(--border-1); border-radius: var(--radius-md); overflow: hidden;">
+        @foreach (var person in _result.Items)
+        {
+            <div @key="person.PersonId" style="padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-2); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;">
+                <div>
+                    <p style="font-weight: 600; color: var(--fg-1); margin: 0;">@person.DisplayName</p>
+                    <p style="font-size: 0.875rem; color: var(--fg-2); margin: var(--space-1) 0 0;">
+                        @if (person.DateOfBirth.HasValue)
+                        {
+                            <span>DOB: @person.DateOfBirth.Value.ToString("d MMM yyyy")</span>
+                            <span style="margin: 0 var(--space-2);">·</span>
+                        }
+                        @if (person.HasPrimaryPhone)
+                        {
+                            <span>Phone: On file</span>
+                            <span style="margin: 0 var(--space-2);">·</span>
+                        }
+                        @if (person.HasNationalInsuranceNumber)
+                        {
+                            <span>NI: On file</span>
+                        }
+                    </p>
+                </div>
+                <div style="display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0;">
+                    @if (person.AlreadyCandidateAtThisBrand && ShowAlreadyRegisteredWarning)
+                    {
+                        <span class="elect-badge elect-badge-warning">Already registered</span>
+                        @if (person.ExistingCandidateId.HasValue)
+                        {
+                            <a href="/app/candidates/@person.ExistingCandidateId.Value" class="btn-outline">View →</a>
+                        }
+                        <button class="btn-dark" disabled>Select</button>
+                    }
+                    else
+                    {
+                        <button class="btn-dark" @onclick="() => SelectPersonAsync(person)">Select</button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="elect-pagination" style="margin-top: var(--space-3);">
+        <span class="elect-pagination-info">Page @_result.Page of @_result.TotalPages (@_result.TotalCount total)</span>
+        <div class="elect-pagination-controls">
+            <button class="btn-outline" @onclick="PreviousPage" disabled="@(!_result.HasPreviousPage)">Previous</button>
+            <button class="btn-outline" @onclick="NextPage" disabled="@(!_result.HasNextPage)">Next</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback<PersonSearchResultDto> OnPersonSelected { get; set; }
+    [Parameter] public bool ShowAlreadyRegisteredWarning { get; set; } = true;
+
+    private string _searchTerm = string.Empty;
+    private int _page = 1;
+    private const int PageSize = 10;
+    private PagedResult<PersonSearchResultDto>? _result;
+    private bool _isLoading;
+    private string? _errorMessage;
+    private CancellationTokenSource? _searchCts;
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _searchTerm = e.Value?.ToString() ?? string.Empty;
+
+        if (_searchTerm.Length > 0 && _searchTerm.Length < 2)
+        {
+            _result = null;
+            StateHasChanged();
+            return;
+        }
+
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+        try
+        {
+            await Task.Delay(400, token);
+            _page = 1;
+            await SearchAsync(token);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task SearchAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            _result = null;
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = null;
+
+        var result = await CandidateService.SearchPersonsForCandidateAsync(_searchTerm, _page, PageSize, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            _result = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task PreviousPage()
+    {
+        _page--;
+        await SearchAsync();
+    }
+
+    private async Task NextPage()
+    {
+        _page++;
+        await SearchAsync();
+    }
+
+    private async Task SelectPersonAsync(PersonSearchResultDto person)
+    {
+        await OnPersonSelected.InvokeAsync(person);
+    }
+
+    public void Dispose()
+    {
+        _searchCts?.Dispose();
+    }
+}

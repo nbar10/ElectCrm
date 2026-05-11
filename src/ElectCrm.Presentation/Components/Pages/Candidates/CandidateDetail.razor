@@ -1,0 +1,196 @@
+@rendermode InteractiveServer
+@page "/app/candidates/{Id:guid}"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject CandidateService CandidateService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_candidate?.PersonDisplayName ?? "Candidate") — Elect CRM</PageTitle>
+
+<a href="/app/candidates" class="back-link">← Candidates</a>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_confirmDeactivate)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg">Deactivate @_candidate?.PersonDisplayName as a candidate? The record can be re-registered later.</span>
+        <button class="btn-danger" @onclick="ConfirmDeactivateAsync">Confirm</button>
+        <button class="btn-outline" @onclick="() => _confirmDeactivate = false">Cancel</button>
+    </div>
+}
+
+@if (_candidate is not null)
+{
+    <div class="elect-detail-card">
+        <div class="elect-contact-header">
+            <div class="elect-avatar">@_initials</div>
+            <div class="elect-contact-header-info">
+                <h1 class="elect-contact-name">@_candidate.PersonDisplayName</h1>
+                <p class="elect-contact-role">Candidate</p>
+            </div>
+            <span class="elect-badge @(_candidate.Status == CandidateStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
+                @_candidate.Status
+            </span>
+        </div>
+
+        <div class="elect-detail-body">
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Registration Date</span>
+                <span class="elect-detail-value">@_candidate.RegistrationDate.ToString("d MMM yyyy")</span>
+
+                <span class="elect-detail-label">Source</span>
+                <span class="elect-detail-value">@(_candidate.Source ?? "—")</span>
+
+                <span class="elect-detail-label">Source Legacy ID</span>
+                <span class="elect-detail-value">@(_candidate.SourceLegacyId ?? "—")</span>
+
+                <span class="elect-detail-label">Primary Trade</span>
+                <span class="elect-detail-value">@(_candidate.PrimaryTrade ?? "—")</span>
+
+                <span class="elect-detail-label">Owner Consultant</span>
+                <span class="elect-detail-value">@(_candidate.OwnerConsultantName ?? "Unassigned")</span>
+
+                <span class="elect-detail-label">Added</span>
+                <span class="elect-detail-value">@_candidate.CreatedAt.ToString("d MMM yyyy")</span>
+
+                <span class="elect-detail-label">Updated</span>
+                <span class="elect-detail-value">@_candidate.UpdatedAt.ToString("d MMM yyyy")</span>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_candidate.Notes))
+            {
+                <div style="margin-top: var(--space-4);">
+                    <p class="elect-detail-label">Notes</p>
+                    <p style="margin-top: var(--space-2); font-size: 0.9375rem; color: var(--fg-1);">@_candidate.Notes</p>
+                </div>
+            }
+
+            <div style="margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-1);">
+                <p class="elect-detail-label">Identity Record</p>
+                <p style="margin-top: var(--space-2);">
+                    <a href="/app/persons/@_candidate.PersonId" class="elect-detail-link">View Person Record →</a>
+                </p>
+                <p style="margin-top: var(--space-1); font-size: 0.875rem; color: var(--fg-2);">
+                    Person name, date of birth, and identity numbers are managed on the Person record.
+                </p>
+            </div>
+
+            <div style="margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-1);">
+                <p class="elect-form-section-title">Change Status</p>
+                <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end; margin-top: var(--space-3);">
+                    <div>
+                        <label class="elect-detail-label" style="display: block; margin-bottom: var(--space-1);">New Status</label>
+                        <select class="elect-input" style="max-width: 200px;"
+                                @onchange="e => { Enum.TryParse<CandidateStatus>(e.Value?.ToString(), out var s); _newStatus = s; }">
+                            @foreach (var s in Enum.GetValues<CandidateStatus>())
+                            {
+                                <option value="@s" selected="@(_newStatus == s)">@s</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="elect-detail-label" style="display: block; margin-bottom: var(--space-1);">Reason (optional)</label>
+                        <input type="text" class="elect-input" placeholder="Reason for change"
+                               style="max-width: 280px;"
+                               @bind="_statusReason" />
+                    </div>
+                    <button class="btn-dark" @onclick="ChangeStatusAsync" disabled="@_isChangingStatus">
+                        @(_isChangingStatus ? "Saving…" : "Change Status")
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-1);">
+                <p class="elect-form-section-title">Deactivate Candidate</p>
+                <div class="elect-confirm-row" style="margin-top: var(--space-3);">
+                    <span class="elect-confirm-row-msg">Deactivate this candidate record. The person can be re-registered later.</span>
+                    <button class="btn-danger" @onclick="() => _confirmDeactivate = true">Deactivate Candidate</button>
+                </div>
+            </div>
+
+            @* COMPLIANCE_SLICE — Right-to-work documents panel *@
+            @* CARDS_SLICE — CSCS/CPCS/NPORS cards panel *@
+            @* AVAILABILITY_SLICE — Availability calendar panel *@
+            @* PLACEMENT_SLICE — Placement history panel *@
+
+            <div class="elect-detail-actions">
+                <a href="/app/candidates/@Id/edit" class="btn-dark">Edit</a>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private CandidateDetailDto? _candidate;
+    private string _initials = string.Empty;
+    private string? _errorMessage;
+    private bool _confirmDeactivate;
+    private CandidateStatus _newStatus;
+    private string _statusReason = string.Empty;
+    private bool _isChangingStatus;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await CandidateService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/candidates");
+            return;
+        }
+
+        _candidate = result.Value;
+        _newStatus = _candidate.Status;
+        _initials = string.Concat(
+            _candidate.PersonDisplayName
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Take(2)
+                .Select(w => char.ToUpperInvariant(w[0])));
+    }
+
+    private async Task ChangeStatusAsync()
+    {
+        _isChangingStatus = true;
+        _errorMessage = null;
+
+        var command = new ChangeCandidateStatusCommand(_newStatus, string.IsNullOrWhiteSpace(_statusReason) ? null : _statusReason);
+        var result = await CandidateService.ChangeStatusAsync(Id, command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _statusReason = string.Empty;
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isChangingStatus = false;
+    }
+
+    private async Task ConfirmDeactivateAsync()
+    {
+        var result = await CandidateService.SoftDeleteAsync(Id, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo("/app/candidates");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _confirmDeactivate = false;
+        }
+    }
+}

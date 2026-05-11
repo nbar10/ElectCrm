@@ -9,7 +9,13 @@
       "Bash(dotnet ef migrations *)",
       "Bash(dotnet ef database *)",
       "Bash(dotnet user-secrets set *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(xargs ls -la)",
+      "Bash(xargs cat)",
+      "Bash(/opt/homebrew/opt/mssql-tools18/bin/sqlcmd *)",
+      "Bash(docker exec azure-sql-edge *)",
+      "Bash(python3 -c \"import pymssql; print\\('pymssql available'\\)\")",
+      "Bash(python3 -c \"import pyodbc; print\\('pyodbc available'\\)\")"
     ]
   }
 }

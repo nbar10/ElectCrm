@@ -31,6 +31,9 @@ public sealed class PersonService
         PersonSearchQuery query,
         CancellationToken cancellationToken = default)
     {
+        // POST_CANDIDATE_SLICE: Once Plan 04 (Candidates) is live, this method should accept
+        // an optional restrictToAgencyBrandId parameter so brand-scoped users see only Persons
+        // linked to their brand via a Candidate record. See Plan 04 §Person List Update.
         var q = _dbContext.Persons.Where(p => !p.IsDeleted);
 
         if (query.Status.HasValue)

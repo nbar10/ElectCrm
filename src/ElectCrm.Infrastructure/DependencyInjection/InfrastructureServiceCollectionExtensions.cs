@@ -2,6 +2,7 @@ namespace ElectCrm.Infrastructure.DependencyInjection;
 
 using ElectCrm.Application.Features.Persons;
 using ElectCrm.Domain.Common;
+using ElectCrm.Infrastructure.Features.Candidates;
 using ElectCrm.Infrastructure.Features.Contacts;
 using ElectCrm.Infrastructure.Features.Persons;
 using ElectCrm.Infrastructure.Identity;
@@ -40,6 +41,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ITenantContext, TenantContextAccessor>();
         services.AddScoped<IDomainEventDispatcher, NoOpDomainEventDispatcher>();
 
+        services.AddScoped<CandidateService>();
         services.AddScoped<ContactService>();
         services.AddScoped<PersonService>();
         services.AddScoped<IPersonHashingService, PersonHashingService>();

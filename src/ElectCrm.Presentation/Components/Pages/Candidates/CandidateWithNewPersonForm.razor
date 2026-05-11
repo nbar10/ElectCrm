@@ -1,0 +1,146 @@
+@* Non-routable form component — no @page directive, inherits rendermode from parent *@
+
+@if (ErrorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@ErrorMessage</div>
+}
+
+<EditForm Model="_form" OnValidSubmit="HandleValidSubmit">
+    <DataAnnotationsValidator />
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">New Person — Identity</p>
+
+        <div class="elect-field">
+            <label class="elect-label">Display Name <span aria-hidden="true">*</span></label>
+            <InputText class="elect-input" @bind-Value="_form.DisplayName" placeholder="Full name" />
+            <ValidationMessage For="() => _form.DisplayName" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Date of Birth</label>
+            <input type="date" class="elect-input"
+                   value="@_form.DobRaw"
+                   @onchange="e => _form.DobRaw = e.Value?.ToString() ?? string.Empty" />
+        </div>
+    </div>
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">New Person — Matching Identifiers</p>
+        <p style="font-size: 0.875rem; color: var(--fg-2); margin-bottom: var(--space-3);">These are stored encrypted and used for matching only.</p>
+
+        <div class="elect-field">
+            <label class="elect-label">Primary Phone</label>
+            <InputText class="elect-input" @bind-Value="_form.PrimaryPhoneRaw" placeholder="+447700000000" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">National Insurance Number</label>
+            <InputText class="elect-input" @bind-Value="_form.NationalInsuranceNumberRaw" placeholder="AB123456C" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Passport Number</label>
+            <InputText class="elect-input" @bind-Value="_form.PassportNumberRaw" placeholder="Passport number" />
+        </div>
+    </div>
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Candidate Registration</p>
+
+        <div class="elect-field">
+            <label class="elect-label">Registration Date</label>
+            <input type="date" class="elect-input"
+                   value="@_form.RegistrationDateRaw"
+                   @onchange="e => _form.RegistrationDateRaw = e.Value?.ToString() ?? string.Empty" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Primary Trade</label>
+            <InputText class="elect-input" @bind-Value="_form.PrimaryTrade" placeholder="e.g. Electrician" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Source</label>
+            <InputText class="elect-input" @bind-Value="_form.Source" placeholder="e.g. Indeed, Referral" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Owner Consultant</label>
+            <input type="text" class="elect-input" placeholder="Consultant GUID (optional)"
+                   value="@_form.OwnerIdRaw"
+                   @onchange="e => _form.OwnerIdRaw = e.Value?.ToString() ?? string.Empty" />
+            <small style="color: var(--fg-2); font-size: 0.8125rem;">Enter the consultant's user GUID. A consultant picker will replace this in a future update.</small>
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Notes</label>
+            <textarea class="elect-input" rows="4"
+                      value="@_form.Notes"
+                      @onchange="e => _form.Notes = e.Value?.ToString()"></textarea>
+        </div>
+    </div>
+
+    <div class="elect-form-actions">
+        <button type="submit" class="btn-gold-sm" disabled="@IsSubmitting">
+            @(IsSubmitting ? "Creating…" : "Create Candidate")
+        </button>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public CreateCandidateWithNewPersonCommand Model { get; set; } = new();
+    [Parameter] public EventCallback<CreateCandidateWithNewPersonCommand> OnValidSubmit { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+
+    private sealed class FormModel
+    {
+        [Required, MaxLength(200)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        public string DobRaw { get; set; } = string.Empty;
+        public string? PrimaryPhoneRaw { get; set; }
+        public string? NationalInsuranceNumberRaw { get; set; }
+        public string? PassportNumberRaw { get; set; }
+        public string RegistrationDateRaw { get; set; } = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+        public string? PrimaryTrade { get; set; }
+        public string? Source { get; set; }
+        public string OwnerIdRaw { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+
+        public DateOnly? RegistrationDateParsed =>
+            DateOnly.TryParse(RegistrationDateRaw, out var d) ? d : null;
+
+        public DateOnly? DobParsed =>
+            DateOnly.TryParse(DobRaw, out var d) ? d : null;
+
+        public Guid? OwnerConsultantId =>
+            Guid.TryParse(OwnerIdRaw, out var g) ? g : null;
+    }
+
+    private FormModel _form = new();
+
+    protected override void OnInitialized()
+    {
+        _form.RegistrationDateRaw = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var command = new CreateCandidateWithNewPersonCommand
+        {
+            DisplayName = _form.DisplayName,
+            DateOfBirth = _form.DobParsed,
+            PrimaryPhoneRaw = _form.PrimaryPhoneRaw,
+            NationalInsuranceNumberRaw = _form.NationalInsuranceNumberRaw,
+            PassportNumberRaw = _form.PassportNumberRaw,
+            RegistrationDate = _form.RegistrationDateParsed,
+            PrimaryTrade = _form.PrimaryTrade,
+            Source = _form.Source,
+            OwnerConsultantId = _form.OwnerConsultantId,
+            Notes = _form.Notes,
+        };
+        await OnValidSubmit.InvokeAsync(command);
+    }
+}

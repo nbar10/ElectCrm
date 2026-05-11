@@ -1,17 +1,15 @@
 @rendermode InteractiveServer
-@page "/app/persons"
-@* POST_CANDIDATE_SLICE: Replace GroupAdmin with AnyStaff and add brand-scoped filtering once PersonService.SearchAsync
-   accepts a restrictToAgencyBrandId parameter. See Plan 04 §Person List Update. *@
-@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
-@inject PersonService PersonService
+@page "/app/candidates"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject CandidateService CandidateService
 @inject NavigationManager NavigationManager
 @implements IDisposable
 
-<PageTitle>Persons — Elect CRM</PageTitle>
+<PageTitle>Candidates — Elect CRM</PageTitle>
 
 <div class="page-header">
-    <h1 class="page-header-title">Persons</h1>
-    <a href="/app/persons/new" class="btn-dark">New Person</a>
+    <h1 class="page-header-title">Candidates</h1>
+    <a href="/app/candidates/new" class="btn-dark">Add Candidate</a>
 </div>
 
 <div style="margin-bottom: var(--space-4); display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap;">
@@ -19,9 +17,13 @@
            value="@_searchTerm" @oninput="OnSearchInput" style="max-width: 400px; flex: 1 1 240px;" />
     <select class="elect-input" style="max-width: 160px; flex: 0 0 auto;" @onchange="OnStatusChange">
         <option value="">All statuses</option>
-        <option value="Active">Active</option>
-        <option value="Retired">Retired</option>
+        @foreach (var s in Enum.GetValues<CandidateStatus>())
+        {
+            <option value="@s">@s</option>
+        }
     </select>
+    <input type="text" class="elect-input" placeholder="Trade…"
+           value="@_tradeFilter" @oninput="OnTradeInput" style="max-width: 180px; flex: 0 0 auto;" />
 </div>
 
 @if (_errorMessage is not null)
@@ -33,18 +35,18 @@
 {
     <p>Loading…</p>
 }
-else if (_result is not null && _result.TotalCount == 0 && string.IsNullOrWhiteSpace(_searchTerm))
+else if (_result is not null && _result.TotalCount == 0 && string.IsNullOrWhiteSpace(_searchTerm) && !_statusFilter.HasValue && string.IsNullOrWhiteSpace(_tradeFilter))
 {
     <div class="elect-empty-state">
-        <p class="elect-empty-state-title">No persons yet</p>
-        <p class="elect-empty-state-body">Add your first person record to get started.</p>
-        <a href="/app/persons/new" class="btn-dark">New Person</a>
+        <p class="elect-empty-state-title">No candidates yet</p>
+        <p class="elect-empty-state-body">Add your first candidate to get started.</p>
+        <a href="/app/candidates/new" class="btn-dark">Add Candidate</a>
     </div>
 }
 else if (_result is not null && _result.TotalCount == 0)
 {
     <div class="elect-empty-state">
-        <p>No persons match your search.</p>
+        <p>No candidates match your search.</p>
     </div>
 }
 else if (_result is not null)
@@ -54,30 +56,32 @@ else if (_result is not null)
             <thead>
                 <tr>
                     <th>Name</th>
-                    <th>Date of Birth</th>
+                    <th>Trade</th>
                     <th>Status</th>
-                    <th>Added</th>
+                    <th>Consultant</th>
+                    <th>Registered</th>
                     <th class="col-right">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var person in _result.Items)
+                @foreach (var candidate in _result.Items)
                 {
-                    <tr @key="person.Id">
+                    <tr @key="candidate.Id">
                         <td>
-                            <a href="/app/persons/@person.Id" class="elect-detail-link">@person.DisplayName</a>
+                            <a href="/app/candidates/@candidate.Id" class="elect-detail-link">@candidate.PersonDisplayName</a>
                         </td>
-                        <td>@(person.DateOfBirth?.ToString("d MMM yyyy") ?? "—")</td>
+                        <td>@(candidate.PrimaryTrade ?? "—")</td>
                         <td>
-                            <span class="elect-badge @(person.Status == PersonStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
-                                @person.Status
+                            <span class="elect-badge @(candidate.Status == CandidateStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
+                                @candidate.Status
                             </span>
                         </td>
-                        <td>@person.CreatedAt.ToString("d MMM yyyy")</td>
+                        <td>@(candidate.OwnerConsultantName ?? "—")</td>
+                        <td>@candidate.RegistrationDate.ToString("d MMM yyyy")</td>
                         <td class="col-right">
                             <div class="elect-table-actions">
-                                <a href="/app/persons/@person.Id/edit" class="btn-outline">Edit</a>
-                                <a href="/app/persons/@person.Id" class="btn-outline">View</a>
+                                <a href="/app/candidates/@candidate.Id" class="btn-outline">View</a>
+                                <a href="/app/candidates/@candidate.Id/edit" class="btn-outline">Edit</a>
                             </div>
                         </td>
                     </tr>
@@ -99,8 +103,9 @@ else if (_result is not null)
     private int _page = 1;
     private const int PageSize = 25;
     private string _searchTerm = string.Empty;
-    private PersonStatus? _statusFilter;
-    private PagedResult<PersonSummaryDto>? _result;
+    private string _tradeFilter = string.Empty;
+    private CandidateStatus? _statusFilter;
+    private PagedResult<CandidateSummaryDto>? _result;
     private bool _isLoading = true;
     private string? _errorMessage;
     private CancellationTokenSource? _searchCts;
@@ -110,14 +115,14 @@ else if (_result is not null)
         await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         _isLoading = true;
         _errorMessage = null;
 
-        var result = await PersonService.SearchAsync(
-            new PersonSearchQuery(_searchTerm, _statusFilter, _page, PageSize),
-            CancellationToken.None);
+        var result = await CandidateService.SearchAsync(
+            new CandidateSearchQuery(_searchTerm, _statusFilter, _tradeFilter, _page, PageSize),
+            cancellationToken);
 
         if (result.IsSuccess)
         {
@@ -136,11 +141,27 @@ else if (_result is not null)
         _searchTerm = e.Value?.ToString() ?? string.Empty;
         _searchCts?.Cancel();
         _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
         try
         {
-            await Task.Delay(400, _searchCts.Token);
+            await Task.Delay(400, token);
             _page = 1;
-            await LoadAsync();
+            await LoadAsync(token);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task OnTradeInput(ChangeEventArgs e)
+    {
+        _tradeFilter = e.Value?.ToString() ?? string.Empty;
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+        try
+        {
+            await Task.Delay(400, token);
+            _page = 1;
+            await LoadAsync(token);
         }
         catch (TaskCanceledException) { }
     }
@@ -148,7 +169,7 @@ else if (_result is not null)
     private async Task OnStatusChange(ChangeEventArgs e)
     {
         var raw = e.Value?.ToString();
-        _statusFilter = Enum.TryParse<PersonStatus>(raw, out var parsed) ? parsed : null;
+        _statusFilter = Enum.TryParse<CandidateStatus>(raw, out var parsed) ? parsed : null;
         _page = 1;
         await LoadAsync();
     }

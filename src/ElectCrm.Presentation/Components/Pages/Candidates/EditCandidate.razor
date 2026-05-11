@@ -1,0 +1,83 @@
+@rendermode InteractiveServer
+@page "/app/candidates/{Id:guid}/edit"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject CandidateService CandidateService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit Candidate — Elect CRM</PageTitle>
+
+<a href="/app/candidates/@Id" class="back-link">← Candidate</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Edit Candidate</h1>
+</div>
+
+@if (_candidate is not null && _command is not null)
+{
+    <div class="elect-form-card">
+        <div style="margin-bottom: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-1);">
+            <p class="elect-detail-label">Identity</p>
+            <p style="margin-top: var(--space-1); font-weight: 600; color: var(--fg-1);">@_candidate.PersonDisplayName</p>
+            <p style="margin-top: var(--space-1); font-size: 0.875rem; color: var(--fg-2);">
+                Registered: @_candidate.RegistrationDate.ToString("d MMM yyyy")
+            </p>
+            <a href="/app/persons/@_candidate.PersonId/edit" class="elect-detail-link" style="font-size: 0.875rem;">Edit person details →</a>
+        </div>
+
+        <CandidateDetailsForm Model="_command"
+                              OnValidSubmit="HandleSubmit"
+                              IsSubmitting="_isSubmitting"
+                              ErrorMessage="_errorMessage"
+                              SubmitLabel="Save Changes"
+                              CancelHref="@($"/app/candidates/{Id}")" />
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private CandidateDetailDto? _candidate;
+    private UpdateCandidateCommand? _command;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await CandidateService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/candidates");
+            return;
+        }
+
+        _candidate = result.Value;
+        _command = new UpdateCandidateCommand
+        {
+            OwnerConsultantId = _candidate.OwnerConsultantId,
+            PrimaryTrade = _candidate.PrimaryTrade,
+            Source = _candidate.Source,
+            SourceLegacyId = _candidate.SourceLegacyId,
+            Notes = _candidate.Notes,
+        };
+    }
+
+    private async Task HandleSubmit(UpdateCandidateCommand command)
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        var result = await CandidateService.UpdateAsync(Id, command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _isSubmitting = false;
+            NavigationManager.NavigateTo($"/app/candidates/{Id}");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+}
