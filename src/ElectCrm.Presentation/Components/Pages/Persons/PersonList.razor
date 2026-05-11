@@ -1,0 +1,170 @@
+@rendermode InteractiveServer
+@page "/app/persons"
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject PersonService PersonService
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<PageTitle>Persons — Elect CRM</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-header-title">Persons</h1>
+    <a href="/app/persons/new" class="btn-dark">New Person</a>
+</div>
+
+<div style="margin-bottom: var(--space-4); display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap;">
+    <input type="text" class="elect-input" placeholder="Search by name…"
+           value="@_searchTerm" @oninput="OnSearchInput" style="max-width: 400px; flex: 1 1 240px;" />
+    <select class="elect-input" style="max-width: 160px; flex: 0 0 auto;" @onchange="OnStatusChange">
+        <option value="">All statuses</option>
+        <option value="Active">Active</option>
+        <option value="Retired">Retired</option>
+    </select>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_isLoading)
+{
+    <p>Loading…</p>
+}
+else if (_result is not null && _result.TotalCount == 0 && string.IsNullOrWhiteSpace(_searchTerm))
+{
+    <div class="elect-empty-state">
+        <p class="elect-empty-state-title">No persons yet</p>
+        <p class="elect-empty-state-body">Add your first person record to get started.</p>
+        <a href="/app/persons/new" class="btn-dark">New Person</a>
+    </div>
+}
+else if (_result is not null && _result.TotalCount == 0)
+{
+    <div class="elect-empty-state">
+        <p>No persons match your search.</p>
+    </div>
+}
+else if (_result is not null)
+{
+    <div class="elect-table-wrap">
+        <table class="elect-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Date of Birth</th>
+                    <th>Status</th>
+                    <th>Added</th>
+                    <th class="col-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var person in _result.Items)
+                {
+                    <tr @key="person.Id">
+                        <td>
+                            <a href="/app/persons/@person.Id" class="elect-detail-link">@person.DisplayName</a>
+                        </td>
+                        <td>@(person.DateOfBirth?.ToString("d MMM yyyy") ?? "—")</td>
+                        <td>
+                            <span class="elect-badge @(person.Status == PersonStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
+                                @person.Status
+                            </span>
+                        </td>
+                        <td>@person.CreatedAt.ToString("d MMM yyyy")</td>
+                        <td class="col-right">
+                            <div class="elect-table-actions">
+                                <a href="/app/persons/@person.Id/edit" class="btn-outline">Edit</a>
+                                <a href="/app/persons/@person.Id" class="btn-outline">View</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="elect-pagination">
+        <span class="elect-pagination-info">Page @_result.Page of @_result.TotalPages (@_result.TotalCount total)</span>
+        <div class="elect-pagination-controls">
+            <button class="btn-outline" @onclick="PreviousPage" disabled="@(!_result.HasPreviousPage)">Previous</button>
+            <button class="btn-outline" @onclick="NextPage" disabled="@(!_result.HasNextPage)">Next</button>
+        </div>
+    </div>
+}
+
+@code {
+    private int _page = 1;
+    private const int PageSize = 25;
+    private string _searchTerm = string.Empty;
+    private PersonStatus? _statusFilter;
+    private PagedResult<PersonSummaryDto>? _result;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+    private CancellationTokenSource? _searchCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var result = await PersonService.SearchAsync(
+            new PersonSearchQuery(_searchTerm, _statusFilter, _page, PageSize),
+            CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _result = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(400, _searchCts.Token);
+            _page = 1;
+            await LoadAsync();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task OnStatusChange(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+        _statusFilter = Enum.TryParse<PersonStatus>(raw, out var parsed) ? parsed : null;
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task PreviousPage()
+    {
+        _page--;
+        await LoadAsync();
+    }
+
+    private async Task NextPage()
+    {
+        _page++;
+        await LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        _searchCts?.Dispose();
+    }
+}

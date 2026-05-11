@@ -1,0 +1,46 @@
+@rendermode InteractiveServer
+@page "/app/persons/new"
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject PersonService PersonService
+@inject NavigationManager NavigationManager
+
+<PageTitle>New Person — Elect CRM</PageTitle>
+
+<a href="/app/persons" class="back-link">← Persons</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">New Person</h1>
+</div>
+
+<div class="elect-form-card">
+    <PersonForm Model="_command"
+                OnValidSubmit="HandleSubmit"
+                IsSubmitting="_isSubmitting"
+                ErrorMessage="@_errorMessage"
+                SubmitLabel="Create Person"
+                CancelHref="/app/persons" />
+</div>
+
+@code {
+    private CreatePersonCommand _command = new();
+    private bool _isSubmitting;
+    private string? _errorMessage;
+
+    private async Task HandleSubmit(CreatePersonCommand command)
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        var result = await PersonService.CreateAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/persons/{result.Value}");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+}

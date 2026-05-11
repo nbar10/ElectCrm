@@ -1,0 +1,91 @@
+@rendermode InteractiveServer
+@page "/app/persons/{Id:guid}/edit"
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject PersonService PersonService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit Person — Elect CRM</PageTitle>
+
+<a href="/app/persons/@Id" class="back-link">← Person</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Edit Person</h1>
+</div>
+
+@if (_notFound)
+{
+    <div class="elect-alert elect-alert-error">Person not found.</div>
+}
+else if (_command is not null)
+{
+    <div class="elect-form-card">
+        <PersonForm Model="_command"
+                    OnValidSubmit="HandleSubmit"
+                    IsSubmitting="_isSubmitting"
+                    ErrorMessage="@_errorMessage"
+                    SubmitLabel="Save Changes"
+                    CancelHref="@($"/app/persons/{Id}")"
+                    ExistingPerson="_existing" />
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private CreatePersonCommand? _command;
+    private PersonDetailDto? _existing;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private bool _notFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await PersonService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _existing = result.Value;
+        _command = ToCommand(_existing);
+    }
+
+    private async Task HandleSubmit(CreatePersonCommand command)
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        var update = new UpdatePersonCommand
+        {
+            DisplayName = command.DisplayName,
+            DateOfBirth = command.DateOfBirth,
+            PrimaryPhoneRaw = command.PrimaryPhoneRaw,
+            NationalInsuranceNumberRaw = command.NationalInsuranceNumberRaw,
+            PassportNumberRaw = command.PassportNumberRaw,
+        };
+
+        var result = await PersonService.UpdateAsync(Id, update, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/persons/{Id}");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+
+    private static CreatePersonCommand ToCommand(PersonDetailDto dto) => new()
+    {
+        DisplayName = dto.DisplayName,
+        DateOfBirth = dto.DateOfBirth,
+        // Identifiers are intentionally null — user must explicitly choose to replace them
+        PrimaryPhoneRaw = null,
+        NationalInsuranceNumberRaw = null,
+        PassportNumberRaw = null,
+    };
+}

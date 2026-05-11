@@ -1,9 +1,11 @@
 namespace ElectCrm.Presentation.Seeding;
 
 using System.Security.Claims;
+using ElectCrm.Application.Features.Persons;
 using ElectCrm.Domain.AgencyBrands;
 using ElectCrm.Domain.Common.ValueObjects;
 using ElectCrm.Domain.Contacts;
+using ElectCrm.Domain.Persons;
 using ElectCrm.Domain.Users;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Infrastructure.Persistence;
@@ -39,8 +41,11 @@ public static class DatabaseSeeder
         var dbContext   = sp.GetRequiredService<ElectCrmDbContext>();
         var userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
         var config      = sp.GetRequiredService<IConfiguration>();
+        var hashing     = sp.GetRequiredService<IPersonHashingService>();
 
         logger.LogInformation("Development seed starting");
+
+        await dbContext.Database.MigrateAsync();
 
         var brand1 = await SeedBrandAsync(dbContext, Brand1Chn, "Elect Group Ltd",        "Elect Group Demo",     AdminEmail,  "Electra", logger);
         var brand2 = await SeedBrandAsync(dbContext, Brand2Chn, "Test Industries Ltd",    "Test Industries Demo", Admin2Email, "Tessa",   logger);
@@ -49,6 +54,7 @@ public static class DatabaseSeeder
         await SeedAdminUserAsync(brand2, Admin2Email, dbContext, userManager, config, logger);
 
         await SeedContactsAsync(brand1, brand2, dbContext, logger);
+        await SeedPersonsAsync(dbContext, hashing, logger);
 
         logger.LogInformation("Development seed complete");
     }
@@ -222,5 +228,90 @@ public static class DatabaseSeeder
         (MetroScaffId,  "Linda Marsh",      "Accounts Payable",     "l.marsh@metroscaff.fake",     "+447700400002", [ContactCategory.AccountsPayable]),
         (PinnacleBldId, "Steve Kwan",       "H&S Officer",          "s.kwan@pinnaclebld.fake",     "+447700500001", [ContactCategory.HealthAndSafety]),
         (PinnacleBldId, "Fiona McAllister", "Recruitment Manager",  "f.mcallister@pinnaclebld.fake","+447700500002",[ContactCategory.Recruitment]),
+    ];
+
+    private static async Task SeedPersonsAsync(
+        ElectCrmDbContext dbContext,
+        IPersonHashingService hashing,
+        ILogger logger)
+    {
+        // Guard on the sentinel seed record, not on any person existing,
+        // so manually-created persons don't block seeding.
+        var alreadySeeded = await dbContext.Persons
+            .AnyAsync(p => p.DisplayName == "John Smith" && p.DateOfBirth == new DateOnly(1985, 3, 14));
+
+        if (alreadySeeded)
+        {
+            logger.LogDebug("Person seed records already present — skipping");
+            return;
+        }
+
+        var seeds = PersonSeeds();
+
+        foreach (var (displayName, dob, phoneRaw, niRaw, passportRaw) in seeds)
+        {
+            string? phoneHash = null, phoneEncrypted = null;
+            if (phoneRaw is not null)
+            {
+                var normalised = phoneRaw.Replace(" ", string.Empty);
+                phoneHash      = hashing.HashValue(normalised);
+                phoneEncrypted = hashing.EncryptValue(normalised);
+            }
+
+            string? niHash = null, niEncrypted = null;
+            if (niRaw is not null)
+            {
+                var niResult = NationalInsuranceNumber.TryCreate(niRaw);
+                if (niResult.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — invalid NI number for '{displayName}': {niResult.Error.Message}");
+
+                niHash      = hashing.HashValue(niResult.Value.Value);
+                niEncrypted = hashing.EncryptValue(niResult.Value.Value);
+            }
+
+            string? passportHash = null, passportEncrypted = null;
+            if (passportRaw is not null)
+            {
+                passportHash      = hashing.HashValue(passportRaw);
+                passportEncrypted = hashing.EncryptValue(passportRaw);
+            }
+
+            var fullNameNormalised = PersonNameNormaliser.Normalise(displayName);
+
+            var result = Person.Create(
+                displayName, fullNameNormalised, dob,
+                phoneHash, phoneEncrypted,
+                niHash, niEncrypted,
+                passportHash, passportEncrypted);
+
+            if (result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — could not create person '{displayName}': {result.Error.Message}");
+
+            dbContext.Persons.Add(result.Value);
+            result.Value.ClearDomainEvents();
+        }
+
+        await dbContext.SaveChangesAsync();
+        logger.LogInformation("Seeded {Count} persons", seeds.Count);
+    }
+
+    // (DisplayName, DateOfBirth, PrimaryPhoneRaw, NiNumberRaw, PassportNumberRaw)
+    // Nulls = identifier not supplied for that person
+    private static List<(string DisplayName, DateOnly? Dob, string? Phone, string? NiNumber, string? Passport)>
+        PersonSeeds() =>
+    [
+        // Similar-name pair — key for future PersonIdentity matching tests
+        ("John Smith",    new DateOnly(1985, 3, 14),  "+447700900001", "AB123456C", "123456001"),
+        ("Jon Smyth",     new DateOnly(1982, 11, 2),  "+447700900002", "CE234567D", null),
+
+        // Distinct individuals — search should return exactly one result each
+        ("Eleanor Whitfield",  new DateOnly(1990, 6, 20),  "+447700900003", "GH345678A", "123456003"),
+        ("Marcus Adeyemi",     new DateOnly(1978, 9, 5),   "+447700900004", "JK456789B", null),
+        ("Priya Kapoor",       new DateOnly(1995, 1, 30),  "+447700900005", "NP567890C", "123456005"),
+        ("Charlotte Davies",   new DateOnly(1988, 7, 17),  "+447700900006", null,        "123456006"),
+        ("Rory MacPherson",    new DateOnly(1975, 4, 22),  "+447700900007", "RS678901D", null),
+        ("Ingrid Karlsson",    new DateOnly(1993, 12, 8),  "+447700900008", "TW789012A", "123456008"),
+        ("Daniel Torres",      new DateOnly(1981, 2, 28),  null,            "XY890123B", null),
+        ("Amelia Foster",      new DateOnly(2000, 8, 3),   "+447700900010", null,        "123456010"),
     ];
 }

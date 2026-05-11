@@ -1,0 +1,182 @@
+@* Non-routable form component — no @page directive, inherits rendermode from parent *@
+
+@if (ErrorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@ErrorMessage</div>
+}
+
+<EditForm Model="_form" OnValidSubmit="HandleValidSubmit">
+    <DataAnnotationsValidator />
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Name &amp; Identity</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="displayName">Display Name <span aria-hidden="true">*</span></label>
+            <InputText id="displayName" class="elect-input" @bind-Value="_form.DisplayName" placeholder="Jane Smith" />
+            <ValidationMessage For="() => _form.DisplayName" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="dob">Date of Birth</label>
+            <input type="date" id="dob" class="elect-input"
+                   value="@_form.DateOfBirthText"
+                   @onchange="@(e => _form.DateOfBirthText = e.Value?.ToString() ?? string.Empty)"
+                   max="@_maxDob" />
+        </div>
+    </div>
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Matching Identifiers</p>
+        @* {{DESIGN_GAP: elect-form-hint}} *@
+        <small style="color: var(--fg-2); font-size: 0.8125rem; margin-bottom: var(--space-2); display: block;">
+            These values are stored encrypted and used for cross-brand identity matching. They are not shown in full after saving.
+        </small>
+
+        @* DESIGN_GAP: SensitiveFieldEditor *@
+        @if (ExistingPerson is not null && ExistingPerson.HasPrimaryPhone)
+        {
+            <div class="elect-field">
+                <label class="elect-label">Primary Phone</label>
+                <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2);">
+                    <input type="checkbox" id="replacePhone" @bind="_form.ReplacePhone" />
+                    <label for="replacePhone" style="font-size: 0.875rem; color: var(--fg-2); margin: 0;">On file — replace?</label>
+                </div>
+                @if (_form.ReplacePhone)
+                {
+                    <InputText class="elect-input" @bind-Value="_form.PrimaryPhoneRaw" placeholder="+447700000000" />
+                    <ValidationMessage For="() => _form.PrimaryPhoneRaw" class="elect-validation-message" />
+                }
+            </div>
+        }
+        else
+        {
+            <div class="elect-field">
+                <label class="elect-label" for="phone">Primary Phone</label>
+                <InputText id="phone" class="elect-input" @bind-Value="_form.PrimaryPhoneRaw" placeholder="+447700000000" />
+                <ValidationMessage For="() => _form.PrimaryPhoneRaw" class="elect-validation-message" />
+            </div>
+        }
+
+        @* DESIGN_GAP: SensitiveFieldEditor *@
+        @if (ExistingPerson is not null && ExistingPerson.HasNationalInsuranceNumber)
+        {
+            <div class="elect-field">
+                <label class="elect-label">NI Number</label>
+                <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2);">
+                    <input type="checkbox" id="replaceNiNumber" @bind="_form.ReplaceNiNumber" />
+                    <label for="replaceNiNumber" style="font-size: 0.875rem; color: var(--fg-2); margin: 0;">On file — replace?</label>
+                </div>
+                @if (_form.ReplaceNiNumber)
+                {
+                    <InputText class="elect-input" @bind-Value="_form.NationalInsuranceNumberRaw" placeholder="AB123456C" />
+                    <ValidationMessage For="() => _form.NationalInsuranceNumberRaw" class="elect-validation-message" />
+                }
+            </div>
+        }
+        else
+        {
+            <div class="elect-field">
+                <label class="elect-label" for="niNumber">NI Number</label>
+                <InputText id="niNumber" class="elect-input" @bind-Value="_form.NationalInsuranceNumberRaw" placeholder="AB123456C" />
+                <ValidationMessage For="() => _form.NationalInsuranceNumberRaw" class="elect-validation-message" />
+            </div>
+        }
+
+        @* DESIGN_GAP: SensitiveFieldEditor *@
+        @if (ExistingPerson is not null && ExistingPerson.HasPassportNumber)
+        {
+            <div class="elect-field">
+                <label class="elect-label">Passport Number</label>
+                <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2);">
+                    <input type="checkbox" id="replacePassport" @bind="_form.ReplacePassport" />
+                    <label for="replacePassport" style="font-size: 0.875rem; color: var(--fg-2); margin: 0;">On file — replace?</label>
+                </div>
+                @if (_form.ReplacePassport)
+                {
+                    <InputText class="elect-input" @bind-Value="_form.PassportNumberRaw" placeholder="123456789" />
+                    <ValidationMessage For="() => _form.PassportNumberRaw" class="elect-validation-message" />
+                }
+            </div>
+        }
+        else
+        {
+            <div class="elect-field">
+                <label class="elect-label" for="passport">Passport Number</label>
+                <InputText id="passport" class="elect-input" @bind-Value="_form.PassportNumberRaw" placeholder="123456789" />
+                <ValidationMessage For="() => _form.PassportNumberRaw" class="elect-validation-message" />
+            </div>
+        }
+    </div>
+
+    <div class="elect-form-actions">
+        <button type="submit" class="btn-gold-sm" disabled="@IsSubmitting">
+            @(IsSubmitting ? "Saving…" : SubmitLabel)
+        </button>
+        @if (CancelHref is not null)
+        {
+            <a href="@CancelHref" class="btn-outline">Cancel</a>
+        }
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public CreatePersonCommand Model { get; set; } = new();
+    [Parameter, EditorRequired] public EventCallback<CreatePersonCommand> OnValidSubmit { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public string SubmitLabel { get; set; } = "Save";
+    [Parameter] public string? CancelHref { get; set; }
+    [Parameter] public PersonDetailDto? ExistingPerson { get; set; }
+
+    private readonly string _maxDob = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-16).ToString("yyyy-MM-dd");
+
+    private sealed class FormModel
+    {
+        [Required, MaxLength(200)] public string DisplayName { get; set; } = string.Empty;
+        public string DateOfBirthText { get; set; } = string.Empty;
+
+        public bool ReplacePhone { get; set; }
+        public bool ReplaceNiNumber { get; set; }
+        public bool ReplacePassport { get; set; }
+
+        [MaxLength(30)] public string? PrimaryPhoneRaw { get; set; }
+        [MaxLength(9)] public string? NationalInsuranceNumberRaw { get; set; }
+        [MaxLength(50)] public string? PassportNumberRaw { get; set; }
+    }
+
+    private FormModel _form = new();
+    private CreatePersonCommand? _lastModel;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastModel, Model))
+            return;
+
+        _lastModel = Model;
+        _form = new FormModel
+        {
+            DisplayName = Model.DisplayName,
+            DateOfBirthText = Model.DateOfBirth?.ToString("yyyy-MM-dd") ?? string.Empty,
+            PrimaryPhoneRaw = Model.PrimaryPhoneRaw,
+            NationalInsuranceNumberRaw = Model.NationalInsuranceNumberRaw,
+            PassportNumberRaw = Model.PassportNumberRaw,
+        };
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        DateOnly? dob = DateOnly.TryParseExact(_form.DateOfBirthText, "yyyy-MM-dd", out var d) ? d : null;
+
+        var command = new CreatePersonCommand
+        {
+            DisplayName = _form.DisplayName,
+            DateOfBirth = dob,
+            PrimaryPhoneRaw = (ExistingPerson is null || _form.ReplacePhone) ? _form.PrimaryPhoneRaw : null,
+            NationalInsuranceNumberRaw = (ExistingPerson is null || _form.ReplaceNiNumber) ? _form.NationalInsuranceNumberRaw : null,
+            PassportNumberRaw = (ExistingPerson is null || _form.ReplacePassport) ? _form.PassportNumberRaw : null,
+        };
+
+        await OnValidSubmit.InvokeAsync(command);
+    }
+}

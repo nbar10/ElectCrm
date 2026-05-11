@@ -5,7 +5,7 @@ using ElectCrm.Domain.Common;
 using ElectCrm.Domain.Contacts.Events;
 using ElectCrm.Shared;
 
-public sealed class Contact : IHasDomainEvents, IHasTenantId
+public sealed class Contact : AuditableEntity, IHasDomainEvents, IHasTenantId
 {
     private readonly List<DomainEvent> _domainEvents = [];
     private List<ContactCategory> _categories = [];
@@ -41,7 +41,6 @@ public sealed class Contact : IHasDomainEvents, IHasTenantId
         UpdatedAt = CreatedAt;
     }
 
-    public Guid Id { get; private set; }
     public Guid AgencyBrandId { get; private set; }
     public Guid ClientId { get; private set; }
     public TenantId TenantId => new(AgencyBrandId);
@@ -50,9 +49,6 @@ public sealed class Contact : IHasDomainEvents, IHasTenantId
     public string? Email { get; private set; }
     public string? Phone { get; private set; }
     public ContactStatus Status { get; private set; }
-    public DateTimeOffset CreatedAt { get; private set; }
-    public DateTimeOffset UpdatedAt { get; private set; }
-    public bool IsDeleted { get; private set; }
     public ChannelPrefs? CommunicationPreferences { get; private set; }
 
     public IReadOnlyList<ContactCategory> PrimaryForCategories => _categories.AsReadOnly();

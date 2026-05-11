@@ -1,0 +1,165 @@
+@rendermode InteractiveServer
+@page "/app/persons/{Id:guid}"
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject PersonService PersonService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_person?.DisplayName ?? "Person") — Elect CRM</PageTitle>
+
+<a href="/app/persons" class="back-link">← Persons</a>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_confirmDeactivate)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg">Deactivate @_person?.DisplayName? Enter a reason below.</span>
+        <input type="text" class="elect-input" placeholder="Reason for deactivation"
+               @bind="_deactivateReason" style="max-width: 320px;" />
+        <button class="btn-danger" @onclick="ConfirmDeactivateAsync">Confirm</button>
+        <button class="btn-outline" @onclick="() => _confirmDeactivate = false">Cancel</button>
+    </div>
+}
+
+@if (_person is not null)
+{
+    <div class="elect-detail-card">
+        <div class="elect-contact-header">
+            <div class="elect-avatar">@_initials</div>
+            <div class="elect-contact-header-info">
+                <h1 class="elect-contact-name">@_person.DisplayName</h1>
+                <p class="elect-contact-role">
+                    @(_person.DateOfBirth.HasValue
+                        ? _person.DateOfBirth.Value.ToString("d MMM yyyy")
+                        : "Date of birth not recorded")
+                </p>
+            </div>
+            <span class="elect-badge @(_person.Status == PersonStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
+                @_person.Status
+            </span>
+        </div>
+
+        <div class="elect-detail-body">
+            @if (_person.ErasedAt.HasValue)
+            {
+                <div class="elect-alert elect-alert-error" role="alert" style="margin-bottom: var(--space-4);">
+                    This record has been erased under GDPR on @_person.ErasedAt.Value.ToString("d MMM yyyy"). Personal data has been permanently removed.
+                </div>
+            }
+
+            <div class="elect-detail-grid">
+                @if (_person.ErasedAt is null)
+                {
+                    <span class="elect-detail-label">Full name (normalised)</span>
+                    <span class="elect-detail-value">@_person.FullNameNormalised</span>
+                }
+
+                <span class="elect-detail-label">Status</span>
+                <span class="elect-detail-value">
+                    <span class="elect-badge @(_person.Status == PersonStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
+                        @_person.Status
+                    </span>
+                </span>
+
+                @if (_person.ErasedAt is null)
+                {
+                    <span class="elect-detail-label">Phone</span>
+                    <span class="elect-detail-value">@(_person.HasPrimaryPhone ? "On file" : "Not recorded")</span>
+
+                    <span class="elect-detail-label">NI Number</span>
+                    <span class="elect-detail-value">@(_person.HasNationalInsuranceNumber ? "On file" : "Not recorded")</span>
+
+                    <span class="elect-detail-label">Passport</span>
+                    <span class="elect-detail-value">@(_person.HasPassportNumber ? "On file" : "Not recorded")</span>
+                }
+
+                <span class="elect-detail-label">Added</span>
+                <span class="elect-detail-value">@_person.CreatedAt.ToString("d MMM yyyy")</span>
+
+                <span class="elect-detail-label">Updated</span>
+                <span class="elect-detail-value">@_person.UpdatedAt.ToString("d MMM yyyy")</span>
+
+                @if (_person.ErasedAt.HasValue)
+                {
+                    <span class="elect-detail-label">Erased</span>
+                    <span class="elect-detail-value">@_person.ErasedAt.Value.ToString("d MMM yyyy")</span>
+                }
+            </div>
+
+            <div style="margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-1);">
+                <p class="elect-form-section-title">Candidate Records</p>
+                @* CANDIDATE_SLICE — linked candidates panel will be added here in Plan 04 *@
+                <p style="font-size: 0.875rem; color: var(--fg-2);">Candidate records will appear here once the Candidate slice is implemented.</p>
+            </div>
+
+            <div class="elect-detail-actions">
+                @if (_person.ErasedAt is null)
+                {
+                    <a href="/app/persons/@Id/edit" class="btn-dark">Edit</a>
+                }
+                @if (_person.Status == PersonStatus.Active && _person.ErasedAt is null)
+                {
+                    <button class="btn-danger" @onclick="() => _confirmDeactivate = true">Deactivate</button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private PersonDetailDto? _person;
+    private string _initials = string.Empty;
+    private string? _errorMessage;
+    private bool _confirmDeactivate;
+    private string _deactivateReason = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await PersonService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/persons");
+            return;
+        }
+
+        _person = result.Value;
+        _initials = string.Concat(
+            _person.DisplayName
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Take(2)
+                .Select(w => char.ToUpperInvariant(w[0])));
+    }
+
+    private async Task ConfirmDeactivateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_deactivateReason))
+        {
+            _errorMessage = "Reason is required.";
+            return;
+        }
+
+        var result = await PersonService.DeactivateAsync(Id, _deactivateReason, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _confirmDeactivate = false;
+            _deactivateReason = string.Empty;
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+    }
+}

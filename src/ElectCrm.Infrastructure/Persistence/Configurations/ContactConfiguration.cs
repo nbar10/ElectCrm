@@ -59,6 +59,7 @@ public sealed class ContactConfiguration : IEntityTypeConfiguration<Contact>
 
         builder.Ignore(e => e.TenantId);
         builder.Ignore(e => e.DomainEvents);
+        builder.Ignore(e => e.DeletedAt);
 
         builder.HasIndex(e => e.AgencyBrandId);
         builder.HasIndex(e => e.ClientId);
