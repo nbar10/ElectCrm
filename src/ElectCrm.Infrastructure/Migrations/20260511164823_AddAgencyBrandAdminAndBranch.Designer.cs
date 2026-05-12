@@ -4,6 +4,7 @@ using ElectCrm.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ElectCrm.Infrastructure.Migrations
 {
     [DbContext(typeof(ElectCrmDbContext))]
-    partial class ElectCrmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260511164823_AddAgencyBrandAdminAndBranch")]
+    partial class AddAgencyBrandAdminAndBranch
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -695,7 +698,7 @@ namespace ElectCrm.Infrastructure.Migrations
 
                             b1.HasKey("AgencyBrandId");
 
-                            b1.ToTable("AgencyBrands", (string)null);
+                            b1.ToTable("AgencyBrands");
 
                             b1.WithOwner()
                                 .HasForeignKey("AgencyBrandId");
@@ -754,7 +757,7 @@ namespace ElectCrm.Infrastructure.Migrations
 
                             b1.HasKey("BranchId");
 
-                            b1.ToTable("Branches", (string)null);
+                            b1.ToTable("Branches");
 
                             b1.WithOwner()
                                 .HasForeignKey("BranchId");
@@ -822,7 +825,7 @@ namespace ElectCrm.Infrastructure.Migrations
 
                             b1.HasKey("ContactId");
 
-                            b1.ToTable("Contacts", (string)null);
+                            b1.ToTable("Contacts");
 
                             b1.WithOwner()
                                 .HasForeignKey("ContactId");

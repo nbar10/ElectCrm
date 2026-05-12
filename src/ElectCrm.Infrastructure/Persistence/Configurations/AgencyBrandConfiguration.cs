@@ -28,6 +28,16 @@ public sealed class AgencyBrandConfiguration : IEntityTypeConfiguration<AgencyBr
             .HasMaxLength(20)
             .IsRequired();
 
+        builder.Property(e => e.CreatedAt)
+            .HasColumnType("datetimeoffset")
+            .HasDefaultValueSql("GETUTCDATE()")
+            .IsRequired();
+
+        builder.Property(e => e.UpdatedAt)
+            .HasColumnType("datetimeoffset")
+            .HasDefaultValueSql("GETUTCDATE()")
+            .IsRequired();
+
         builder.OwnsOne(e => e.RegisteredAddress, addr =>
         {
             addr.Property(a => a.Line1).HasColumnName("RegisteredAddressLine1").HasMaxLength(200).IsRequired();

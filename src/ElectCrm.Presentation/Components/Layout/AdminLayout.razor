@@ -1,0 +1,71 @@
+@inherits LayoutComponentBase
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+
+<div class="shell admin-shell">
+
+    <aside class="shell-sidebar">
+        <div class="shell-sidebar-brand">
+            <span class="shell-brand-mark">Elect</span>
+            <span class="shell-brand-sub admin-brand-sub">Admin</span>
+        </div>
+
+        <nav class="shell-nav" aria-label="Administration navigation">
+            <p class="shell-nav-section-label">Administration</p>
+            <NavLink class="shell-nav-item" href="/admin/brands">
+                <svg class="shell-nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="7" width="16" height="11" rx="1.5"/>
+                    <path d="M6 7V5a4 4 0 018 0v2"/>
+                    <circle cx="10" cy="13" r="1.5"/>
+                </svg>
+                Brands
+            </NavLink>
+
+            @* BRAND_ADMIN_SLICE — BrandAdmin self-service nav items *@
+            @* USER_MANAGEMENT_SLICE — GroupAdmin claim assignment UI goes here *@
+
+            <div class="shell-nav-divider" role="separator"></div>
+
+            <a class="shell-nav-item" href="/app">
+                <svg class="shell-nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 14l-5-5 5-5"/>
+                    <path d="M4 9h12"/>
+                </svg>
+                Back to App
+            </a>
+        </nav>
+    </aside>
+
+    <div class="shell-main">
+        <header class="shell-header admin-header">
+            <span class="admin-header-eyebrow">Admin Area</span>
+            <div class="shell-header-sep" role="separator" aria-hidden="true"></div>
+            <span class="shell-header-user">@_userName</span>
+            <div class="shell-header-sep" role="separator" aria-hidden="true"></div>
+            <a href="/account/logout" class="shell-header-logout">Sign out</a>
+        </header>
+
+        <main class="shell-content" id="main-content">
+            @Body
+        </main>
+    </div>
+
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private string _userName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        _userName = auth.User.Identity?.Name ?? string.Empty;
+    }
+}

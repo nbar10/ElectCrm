@@ -1,0 +1,49 @@
+/* Admin shell — distinct header band signals "admin mode" */
+.admin-shell .admin-header {
+    background: var(--error);
+    border-bottom: none;
+}
+
+.admin-shell .admin-header .shell-header-sep {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.admin-shell .admin-header .shell-header-user,
+.admin-shell .admin-header .shell-header-logout {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.admin-shell .admin-header .shell-header-logout:hover {
+    color: #ffffff;
+}
+
+.admin-header-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.9);
+    margin-right: auto;
+}
+
+/* Admin sidebar section label */
+.shell-nav-section-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    padding: var(--space-4) var(--space-5) var(--space-2);
+    margin: 0;
+}
+
+.admin-brand-sub {
+    color: var(--error) !important;
+}
+
+/* Sidebar divider between admin nav and back link */
+.shell-nav-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: var(--space-3) var(--space-5);
+}

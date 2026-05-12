@@ -45,6 +45,16 @@
                 </svg>
                 Contacts
             </NavLink>
+            @if (_isGroupAdmin)
+            {
+                <NavLink class="shell-nav-item" href="/admin/brands">
+                    <svg class="shell-nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M10.5 3L17 6.5v7L10.5 17 4 13.5v-7L10.5 3z"/>
+                        <path d="M10.5 3v14M4 6.5l6.5 4 6.5-4"/>
+                    </svg>
+                    Admin
+                </NavLink>
+            }
         </nav>
     </aside>
 
@@ -76,11 +86,16 @@
 
     private string _userName = string.Empty;
     private string _tenantName = string.Empty;
+    private bool _isGroupAdmin;
 
     protected override async Task OnInitializedAsync()
     {
         var auth = await AuthState;
         _userName = auth.User.Identity?.Name ?? string.Empty;
+
+        _isGroupAdmin = auth.User.Claims.Any(c =>
+            c.Type == ElectClaimTypes.Role &&
+            c.Value.Split(':')[0].Equals("GroupAdmin", StringComparison.Ordinal));
 
         await using var db = await DbContextFactory.CreateDbContextAsync();
         _tenantName = await db.AgencyBrands

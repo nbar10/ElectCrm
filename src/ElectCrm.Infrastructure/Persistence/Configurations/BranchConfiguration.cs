@@ -23,6 +23,16 @@ public sealed class BranchConfiguration : IEntityTypeConfiguration<Branch>
             .HasMaxLength(20)
             .IsRequired();
 
+        builder.Property(e => e.CreatedAt)
+            .HasColumnType("datetimeoffset")
+            .HasDefaultValueSql("GETUTCDATE()")
+            .IsRequired();
+
+        builder.Property(e => e.UpdatedAt)
+            .HasColumnType("datetimeoffset")
+            .HasDefaultValueSql("GETUTCDATE()")
+            .IsRequired();
+
         builder.Property(e => e.Geography)
             .HasConversion<GeoAreaConverter>()
             .HasColumnType("nvarchar(max)")
@@ -41,7 +51,10 @@ public sealed class BranchConfiguration : IEntityTypeConfiguration<Branch>
         builder.Ignore(e => e.TenantId);
         builder.Ignore(e => e.DomainEvents);
 
-        builder.HasIndex(e => e.AgencyBrandId);
+        // Unique composite index enforces branch name uniqueness within a brand.
+        // Replaces the prior non-unique IX_Branches_AgencyBrandId.
+        builder.HasIndex(e => new { e.AgencyBrandId, e.Name }).IsUnique()
+            .HasDatabaseName("IX_Branches_AgencyBrandId_Name");
         builder.HasIndex(e => new { e.AgencyBrandId, e.Status });
 
         builder.HasOne<AgencyBrand>()

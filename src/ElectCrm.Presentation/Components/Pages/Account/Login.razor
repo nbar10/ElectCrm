@@ -1,6 +1,7 @@
 @page "/"
 @page "/account/login"
 @layout AuthLayout
+@using ElectCrm.Domain.Common
 @using ElectCrm.Infrastructure.Identity
 @using Microsoft.AspNetCore.Identity
 @inject SignInManager<ApplicationUser> SignInManager
@@ -59,25 +60,33 @@
 
     private async Task LoginAsync()
     {
-        var result = await SignInManager.PasswordSignInAsync(
-            Input.Email ?? string.Empty,
-            Input.Password ?? string.Empty,
-            isPersistent: false,
-            lockoutOnFailure: true);
+        try
+        {
+            var result = await SignInManager.PasswordSignInAsync(
+                Input.Email ?? string.Empty,
+                Input.Password ?? string.Empty,
+                isPersistent: false,
+                lockoutOnFailure: true);
 
-        if (result.Succeeded)
-        {
-            Logger.LogInformation("User {Email} signed in", Input.Email);
-            NavigationManager.NavigateTo(SafeReturnUrl());
+            if (result.Succeeded)
+            {
+                Logger.LogInformation("User {Email} signed in", Input.Email);
+                NavigationManager.NavigateTo(SafeReturnUrl());
+            }
+            else if (result.IsLockedOut)
+            {
+                Logger.LogWarning("Account locked out for {Email}", Input.Email);
+                _errorMessage = "This account has been locked. Please try again later.";
+            }
+            else
+            {
+                _errorMessage = "Invalid email or password.";
+            }
         }
-        else if (result.IsLockedOut)
+        catch (BrandInactiveException ex)
         {
-            Logger.LogWarning("Account locked out for {Email}", Input.Email);
-            _errorMessage = "This account has been locked. Please try again later.";
-        }
-        else
-        {
-            _errorMessage = "Invalid email or password.";
+            Logger.LogWarning("Login blocked for {Email} — brand is inactive", Input.Email);
+            _errorMessage = ex.Message;
         }
     }
 

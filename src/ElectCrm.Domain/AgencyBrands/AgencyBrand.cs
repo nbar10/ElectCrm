@@ -45,6 +45,8 @@ public sealed class AgencyBrand : IHasDomainEvents, IHasTenantId
         ParentGroupId = parentGroupId;
         Status = AgencyBrandStatus.Active;
         OnboardedAt = DateTimeOffset.UtcNow;
+        CreatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     public Guid Id { get; private set; }
@@ -67,6 +69,10 @@ public sealed class AgencyBrand : IHasDomainEvents, IHasTenantId
     public string? OnCallContactPhone { get; private set; }
     public TimeOnly? OnCallQuietHoursStart { get; private set; }
     public TimeOnly? OnCallQuietHoursEnd { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset UpdatedAt { get; private set; }
+
+    // AUDIT_ACTOR_SLICE — add CreatedBy/LastModifiedBy Guid? once ICurrentUserContext is established.
 
     public IReadOnlyList<DomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
@@ -119,6 +125,30 @@ public sealed class AgencyBrand : IHasDomainEvents, IHasTenantId
         return Result<AgencyBrand>.Success(brand);
     }
 
+    public void Update(
+        string legalName,
+        string tradingName,
+        string? vatNumber,
+        string? glaaLicenceNumber,
+        Address registeredAddress,
+        string primaryContactEmail,
+        string? agentPersonaName,
+        Guid? parentGroupId)
+    {
+        LegalName = legalName;
+        TradingName = tradingName;
+        VatNumber = vatNumber;
+        GlaaLicenceNumber = glaaLicenceNumber;
+        RegisteredAddress = registeredAddress;
+        PrimaryContactEmail = primaryContactEmail;
+        if (agentPersonaName is not null)
+            AgentPersonaName = agentPersonaName;
+        ParentGroupId = parentGroupId;
+        UpdatedAt = DateTimeOffset.UtcNow;
+
+        _domainEvents.Add(new AgencyBrandUpdatedEvent(Id, UpdatedAt));
+    }
+
     public void SetOnCallContact(
         string phone,
         TimeOnly? quietHoursStart = null,
@@ -131,9 +161,26 @@ public sealed class AgencyBrand : IHasDomainEvents, IHasTenantId
 
     public void SetDwpAccountId(string dwpAccountId) => DwpAccountId = dwpAccountId;
 
-    public void Pause() => Status = AgencyBrandStatus.Paused;
-    public void Retire() => Status = AgencyBrandStatus.Retired;
-    public void Reactivate() => Status = AgencyBrandStatus.Active;
+    public void Pause()
+    {
+        Status = AgencyBrandStatus.Paused;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        _domainEvents.Add(new AgencyBrandPausedEvent(Id, TradingName));
+    }
+
+    public void Retire()
+    {
+        Status = AgencyBrandStatus.Retired;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        _domainEvents.Add(new AgencyBrandRetiredEvent(Id, TradingName));
+    }
+
+    public void Reactivate()
+    {
+        Status = AgencyBrandStatus.Active;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        _domainEvents.Add(new AgencyBrandReactivatedEvent(Id, TradingName));
+    }
 
     // 8 digits, or 2-letter prefix + 6 digits (SC, NI, OC, LP, etc.)
     private static bool IsValidCompaniesHouseNumber(string number) =>

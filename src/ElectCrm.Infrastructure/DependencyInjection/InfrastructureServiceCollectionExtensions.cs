@@ -2,6 +2,7 @@ namespace ElectCrm.Infrastructure.DependencyInjection;
 
 using ElectCrm.Application.Features.Persons;
 using ElectCrm.Domain.Common;
+using ElectCrm.Infrastructure.Features.Admin;
 using ElectCrm.Infrastructure.Features.Candidates;
 using ElectCrm.Infrastructure.Features.Contacts;
 using ElectCrm.Infrastructure.Features.Persons;
@@ -36,11 +37,18 @@ public static class InfrastructureServiceCollectionExtensions
             .AddDefaultTokenProviders()
             .AddClaimsPrincipalFactory<ElectUserClaimsPrincipalFactory>();
 
+        services.ConfigureApplicationCookie(options =>
+        {
+            options.AccessDeniedPath = "/access-denied";
+        });
+
         services.AddHttpContextAccessor();
 
         services.AddScoped<ITenantContext, TenantContextAccessor>();
         services.AddScoped<IDomainEventDispatcher, NoOpDomainEventDispatcher>();
 
+        services.AddScoped<AgencyBrandAdminService>();
+        services.AddScoped<BranchAdminService>();
         services.AddScoped<CandidateService>();
         services.AddScoped<ContactService>();
         services.AddScoped<PersonService>();

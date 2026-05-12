@@ -25,6 +25,8 @@ public sealed class Branch : IHasDomainEvents, IHasTenantId
         Address = address;
         Geography = geography;
         Status = BranchStatus.Active;
+        CreatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     public Guid Id { get; private set; }
@@ -38,6 +40,10 @@ public sealed class Branch : IHasDomainEvents, IHasTenantId
     public Address Address { get; private set; }
     public GeoArea Geography { get; private set; }
     public BranchStatus Status { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset UpdatedAt { get; private set; }
+
+    // AUDIT_ACTOR_SLICE — add CreatedBy/LastModifiedBy Guid? once ICurrentUserContext is established.
 
     public IReadOnlyList<DomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
@@ -59,8 +65,34 @@ public sealed class Branch : IHasDomainEvents, IHasTenantId
         return Result<Branch>.Success(branch);
     }
 
+    public void Update(string name, Address address, GeoArea geography)
+    {
+        Name = name;
+        Address = address;
+        Geography = geography;
+        UpdatedAt = DateTimeOffset.UtcNow;
+
+        _domainEvents.Add(new BranchUpdatedEvent(Id, TenantId, UpdatedAt));
+    }
+
     public void UpdateGeography(GeoArea geography) => Geography = geography;
 
-    public void Retire() => Status = BranchStatus.Retired;
-    public void Reactivate() => Status = BranchStatus.Active;
+    public Result Retire()
+    {
+        if (Status == BranchStatus.Retired)
+            return Result.Failure(Error.Validation("Branch is already retired."));
+
+        Status = BranchStatus.Retired;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        _domainEvents.Add(new BranchRetiredEvent(Id, TenantId, Name));
+
+        return Result.Success();
+    }
+
+    public void Reactivate()
+    {
+        Status = BranchStatus.Active;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        _domainEvents.Add(new BranchReactivatedEvent(Id, TenantId, Name));
+    }
 }

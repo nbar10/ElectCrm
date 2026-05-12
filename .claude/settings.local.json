@@ -15,7 +15,9 @@
       "Bash(/opt/homebrew/opt/mssql-tools18/bin/sqlcmd *)",
       "Bash(docker exec azure-sql-edge *)",
       "Bash(python3 -c \"import pymssql; print\\('pymssql available'\\)\")",
-      "Bash(python3 -c \"import pyodbc; print\\('pyodbc available'\\)\")"
+      "Bash(python3 -c \"import pyodbc; print\\('pyodbc available'\\)\")",
+      "Bash(timeout 30 dotnet run --project src/ElectCrm.Presentation --no-build)",
+      "Bash(timeout 35 dotnet run --project src/ElectCrm.Presentation --no-build)"
     ]
   }
 }

@@ -1,0 +1,374 @@
+@rendermode InteractiveServer
+@page "/admin/brands/{Id:guid}"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_brand?.TradingName ?? "Brand") — Admin — Elect CRM</PageTitle>
+
+<a href="/admin/brands" class="back-link">← Brands</a>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_successMessage is not null)
+{
+    <div class="elect-alert elect-alert-success" role="status">@_successMessage</div>
+}
+
+@if (_confirmPause)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg">
+            Pausing this brand will prevent its consultants from accessing the system. Confirm?
+        </span>
+        <button class="btn-danger" @onclick="ConfirmPauseAsync" disabled="@_isWorking">Confirm Pause</button>
+        <button class="btn-outline" @onclick="() => _confirmPause = false">Cancel</button>
+    </div>
+}
+
+@if (_confirmRetire)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg" style="flex-direction: column; align-items: flex-start; gap: var(--space-2);">
+            <strong>Retire "@(_brand?.TradingName)"?</strong>
+            This action will prevent all users of this brand from logging in.
+            This brand has @(_brand?.Branches.Count ?? 0) branch(es).
+            @* RETIREMENT_COUNTS_DEFERRED — User, Candidate, and Contact counts require
+               extending AgencyBrandDetailDto or injecting additional services.
+               Deferred until USER_MANAGEMENT_SLICE adds user count to the DTO. *@
+            Branches and data are retained but operationally inaccessible.
+            <label style="display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-1);">
+                <input type="checkbox" @bind="_retireConfirmChecked" />
+                I confirm I want to retire @(_brand?.TradingName)
+            </label>
+        </span>
+        <button class="btn-danger"
+                @onclick="ConfirmRetireAsync"
+                disabled="@(!_retireConfirmChecked || _isWorking)">
+            Retire Brand
+        </button>
+        <button class="btn-outline" @onclick="() => { _confirmRetire = false; _retireConfirmChecked = false; }">Cancel</button>
+    </div>
+}
+
+@if (_brand is not null)
+{
+    <div class="page-header">
+        <h1 class="page-header-title">@_brand.TradingName</h1>
+        <span class="elect-badge @GetStatusBadgeClass(_brand.Status)">@_brand.Status</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); margin-bottom: var(--space-6);">
+
+        <div class="elect-detail-card" style="max-width: none;">
+            <div class="elect-contact-header">
+                <div class="elect-contact-header-info">
+                    <h2 class="elect-contact-name">Identity</h2>
+                </div>
+            </div>
+            <div class="elect-detail-body">
+                <div class="elect-detail-grid">
+                    <span class="elect-detail-label">Legal Name</span>
+                    <span class="elect-detail-value">@_brand.LegalName</span>
+
+                    <span class="elect-detail-label">Trading Name</span>
+                    <span class="elect-detail-value">@_brand.TradingName</span>
+
+                    <span class="elect-detail-label">Companies House</span>
+                    <span class="elect-detail-value">@_brand.CompaniesHouseNumber</span>
+
+                    <span class="elect-detail-label">VAT Number</span>
+                    <span class="elect-detail-value">@(_brand.VatNumber ?? "—")</span>
+
+                    <span class="elect-detail-label">GLAA Licence</span>
+                    <span class="elect-detail-value">@(_brand.GlaaLicenceNumber ?? "—")</span>
+
+                    <span class="elect-detail-label">Contact Email</span>
+                    <span class="elect-detail-value">@_brand.PrimaryContactEmail</span>
+
+                    <span class="elect-detail-label">DWP Account ID</span>
+                    <span class="elect-detail-value">@(_brand.DwpAccountId ?? "—")</span>
+
+                    @* AgentPersonaName not in AgencyBrandDetailDto — omitted pending DTO extension *@
+
+                    <span class="elect-detail-label">Parent Group</span>
+                    <span class="elect-detail-value">@GetParentGroupDisplay()</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="elect-detail-card" style="max-width: none;">
+            <div class="elect-contact-header">
+                <div class="elect-contact-header-info">
+                    <h2 class="elect-contact-name">Registered Address</h2>
+                </div>
+            </div>
+            <div class="elect-detail-body">
+                <div class="elect-detail-grid">
+                    <span class="elect-detail-label">Line 1</span>
+                    <span class="elect-detail-value">@_brand.RegisteredAddress.Line1</span>
+
+                    <span class="elect-detail-label">Line 2</span>
+                    <span class="elect-detail-value">@(_brand.RegisteredAddress.Line2 ?? "—")</span>
+
+                    <span class="elect-detail-label">City</span>
+                    <span class="elect-detail-value">@_brand.RegisteredAddress.City</span>
+
+                    <span class="elect-detail-label">County</span>
+                    <span class="elect-detail-value">@(_brand.RegisteredAddress.County ?? "—")</span>
+
+                    <span class="elect-detail-label">Postcode</span>
+                    <span class="elect-detail-value">@_brand.RegisteredAddress.Postcode</span>
+
+                    <span class="elect-detail-label">Country</span>
+                    <span class="elect-detail-value">@_brand.RegisteredAddress.Country</span>
+                </div>
+
+                <div style="margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-1);">
+                    <div class="elect-detail-grid">
+                        <span class="elect-detail-label">Onboarded</span>
+                        <span class="elect-detail-value">@_brand.OnboardedAt.ToString("d MMM yyyy")</span>
+
+                        <span class="elect-detail-label">Created</span>
+                        <span class="elect-detail-value">@_brand.CreatedAt.ToString("d MMM yyyy HH:mm")</span>
+
+                        <span class="elect-detail-label">Updated</span>
+                        <span class="elect-detail-value">@_brand.UpdatedAt.ToString("d MMM yyyy HH:mm")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    @* Dependent counts — USER_MANAGEMENT_SLICE: User count requires UserManagementService.
+       Candidate and Contact counts are scoped to this brand's tenant and would require
+       injecting DbContext or extending the admin service. Deferred to keep Presentation
+       layer service-only, consistent with the pattern in CandidateDetail.razor. *@
+
+    <div class="elect-detail-card" style="max-width: none; margin-bottom: var(--space-6);">
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <h2 class="elect-contact-name">Branches</h2>
+                <p class="elect-contact-role">@_brand.Branches.Count branch(es)</p>
+            </div>
+            <a href="/admin/brands/@Id/branches" class="btn-outline">Manage Branches</a>
+        </div>
+        <div class="elect-detail-body" style="padding: 0;">
+            @if (_brand.Branches.Count == 0)
+            {
+                <div class="elect-empty-state" style="padding: var(--space-8);">
+                    <p class="elect-empty-state-title">No branches yet</p>
+                    <p class="elect-empty-state-body">Create the first branch to assign users.</p>
+                    <a href="/admin/brands/@Id/branches/new" class="btn-dark">Add Branch</a>
+                </div>
+            }
+            else
+            {
+                <div class="elect-table-wrap" style="border: none; border-radius: 0; box-shadow: none;">
+                    <table class="elect-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Postcode Prefixes</th>
+                                <th class="col-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var branch in _brand.Branches)
+                            {
+                                <tr @key="branch.Id">
+                                    <td>@branch.Name</td>
+                                    <td>
+                                        <span class="elect-badge @GetBranchStatusBadgeClass(branch.Status)">
+                                            @branch.Status
+                                        </span>
+                                    </td>
+                                    <td>@(branch.PostcodePrefixes.Count > 0 ? string.Join(", ", branch.PostcodePrefixes) : "—")</td>
+                                    <td class="col-right">
+                                        <a href="/admin/brands/@Id/branches/@branch.Id/edit" class="btn-outline">Edit</a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="elect-detail-card" style="max-width: none; margin-bottom: var(--space-6);">
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <h2 class="elect-contact-name">Status</h2>
+            </div>
+        </div>
+        <div class="elect-detail-body">
+            <p class="elect-form-section-title">Change Status</p>
+            <p style="font-size: 0.875rem; color: var(--fg-2); margin: var(--space-2) 0 var(--space-4);">
+                Current status: <strong>@_brand.Status</strong>
+                @* SECURITY_STAMP_SLICE — invalidate active sessions when brand is paused/retired *@
+            </p>
+            <div style="display: flex; gap: var(--space-3); flex-wrap: wrap;">
+                @if (_brand.Status == AgencyBrandStatus.Active)
+                {
+                    <button class="btn-outline" style="border-color: var(--warning); color: var(--warning);"
+                            @onclick="() => _confirmPause = true" disabled="@_isWorking">
+                        Pause Brand
+                    </button>
+                    <button class="btn-danger" @onclick="() => _confirmRetire = true" disabled="@_isWorking">
+                        Retire Brand
+                    </button>
+                }
+                @if (_brand.Status == AgencyBrandStatus.Paused)
+                {
+                    <button class="btn-dark" @onclick="ReactivateAsync" disabled="@_isWorking">
+                        Reactivate Brand
+                    </button>
+                    <button class="btn-danger" @onclick="() => _confirmRetire = true" disabled="@_isWorking">
+                        Retire Brand
+                    </button>
+                }
+                @if (_brand.Status == AgencyBrandStatus.Retired)
+                {
+                    <div class="elect-alert elect-alert-error" style="margin-bottom: 0; margin-right: var(--space-4);">
+                        Reactivating will not restore user access — users must be re-provisioned manually.
+                    </div>
+                    <button class="btn-dark" @onclick="ReactivateAsync" disabled="@_isWorking">
+                        Reactivate Brand
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="elect-detail-actions">
+        <a href="/admin/brands/@Id/edit" class="btn-dark">Edit</a>
+        <a href="/admin/brands/@Id/branches" class="btn-outline">Manage Branches</a>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private AgencyBrandDetailDto? _brand;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private bool _confirmPause;
+    private bool _confirmRetire;
+    private bool _retireConfirmChecked;
+    private bool _isWorking;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _errorMessage = null;
+
+        var result = await AgencyBrandAdminService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/admin/brands");
+            return;
+        }
+
+        _brand = result.Value;
+    }
+
+    private async Task ConfirmPauseAsync()
+    {
+        _isWorking = true;
+        _confirmPause = false;
+        _errorMessage = null;
+        _successMessage = null;
+
+        var result = await AgencyBrandAdminService.ChangeStatusAsync(Id, AgencyBrandStatus.Paused, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = "Brand has been paused.";
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private async Task ConfirmRetireAsync()
+    {
+        if (!_retireConfirmChecked)
+            return;
+
+        _isWorking = true;
+        _confirmRetire = false;
+        _retireConfirmChecked = false;
+        _errorMessage = null;
+        _successMessage = null;
+
+        var result = await AgencyBrandAdminService.ChangeStatusAsync(Id, AgencyBrandStatus.Retired, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = "Brand has been retired.";
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private async Task ReactivateAsync()
+    {
+        _isWorking = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        var result = await AgencyBrandAdminService.ChangeStatusAsync(Id, AgencyBrandStatus.Active, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = "Brand has been reactivated.";
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private string GetParentGroupDisplay()
+    {
+        if (_brand is null || !_brand.ParentGroupId.HasValue)
+            return "—";
+        return _brand.ParentGroupId.Value.ToString();
+    }
+
+    private static string GetStatusBadgeClass(AgencyBrandStatus status) =>
+        status switch
+        {
+            AgencyBrandStatus.Active => "elect-badge-active",
+            AgencyBrandStatus.Paused => "elect-badge-warning",
+            AgencyBrandStatus.Retired => "elect-badge-retired",
+            _ => "elect-badge-retired"
+        };
+
+    private static string GetBranchStatusBadgeClass(BranchStatus status) =>
+        status == BranchStatus.Active ? "elect-badge-active" : "elect-badge-retired";
+}

@@ -1,0 +1,265 @@
+@rendermode InteractiveServer
+@page "/admin/brands/new"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Add Brand — Admin — Elect CRM</PageTitle>
+
+<a href="/admin/brands" class="back-link">← Brands</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Add Agency Brand</h1>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div class="elect-form-card" style="max-width: 720px;">
+    <EditForm Model="_model" OnValidSubmit="SubmitAsync">
+        <DataAnnotationsValidator />
+
+        <p class="elect-form-section-title">Legal Identity</p>
+        <div class="elect-form-section">
+            <div class="elect-field">
+                <label class="elect-label" for="legalName">Legal Name</label>
+                <InputText id="legalName" class="elect-input" @bind-Value="_model.LegalName" placeholder="Company legal name" />
+                <ValidationMessage For="() => _model.LegalName" class="elect-validation-message" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="tradingName">Trading Name</label>
+                <InputText id="tradingName" class="elect-input" @bind-Value="_model.TradingName"
+                           placeholder="Brand trading name"
+                           @oninput="OnTradingNameInput" />
+                <ValidationMessage For="() => _model.TradingName" class="elect-validation-message" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="companiesHouseNumber">Companies House Number</label>
+                <InputText id="companiesHouseNumber" class="elect-input" @bind-Value="_model.CompaniesHouseNumber"
+                           placeholder="e.g. 12345678 or SC123456" />
+                <ValidationMessage For="() => _model.CompaniesHouseNumber" class="elect-validation-message" />
+            </div>
+        </div>
+
+        <div class="elect-form-section">
+            <p class="elect-form-section-title">Regulatory</p>
+            <div class="elect-field">
+                <label class="elect-label" for="vatNumber">VAT Number (optional)</label>
+                <InputText id="vatNumber" class="elect-input" @bind-Value="_model.VatNumber" placeholder="e.g. GB123456789" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="glaaLicenceNumber">GLAA Licence Number (optional)</label>
+                <InputText id="glaaLicenceNumber" class="elect-input" @bind-Value="_model.GlaaLicenceNumber" placeholder="GLAA licence reference" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="primaryContactEmail">Primary Contact Email</label>
+                <InputText id="primaryContactEmail" class="elect-input" type="email" @bind-Value="_model.PrimaryContactEmail"
+                           placeholder="admin@example.com" />
+                <ValidationMessage For="() => _model.PrimaryContactEmail" class="elect-validation-message" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="agentPersonaName">Agent Persona Name</label>
+                <InputText id="agentPersonaName" class="elect-input" @bind-Value="_model.AgentPersonaName"
+                           placeholder="Name used by the AI agent for this brand" />
+                <small style="color: var(--fg-2); font-size: 0.8125rem;">Name used by the AI engagement agent for this brand. Defaults to Trading Name if left blank.</small>
+                <ValidationMessage For="() => _model.AgentPersonaName" class="elect-validation-message" />
+            </div>
+        </div>
+
+        <div class="elect-form-section">
+            <p class="elect-form-section-title">Registered Address</p>
+            <div class="elect-field">
+                <label class="elect-label" for="addrLine1">Line 1</label>
+                <InputText id="addrLine1" class="elect-input" @bind-Value="_model.AddressLine1" placeholder="Street address" />
+                <ValidationMessage For="() => _model.AddressLine1" class="elect-validation-message" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="addrLine2">Line 2 (optional)</label>
+                <InputText id="addrLine2" class="elect-input" @bind-Value="_model.AddressLine2" placeholder="Suite, floor, etc." />
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+                <div class="elect-field">
+                    <label class="elect-label" for="addrCity">City</label>
+                    <InputText id="addrCity" class="elect-input" @bind-Value="_model.AddressCity" placeholder="City" />
+                    <ValidationMessage For="() => _model.AddressCity" class="elect-validation-message" />
+                </div>
+                <div class="elect-field">
+                    <label class="elect-label" for="addrCounty">County (optional)</label>
+                    <InputText id="addrCounty" class="elect-input" @bind-Value="_model.AddressCounty" placeholder="County" />
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+                <div class="elect-field">
+                    <label class="elect-label" for="addrPostcode">Postcode</label>
+                    <InputText id="addrPostcode" class="elect-input" @bind-Value="_model.AddressPostcode" placeholder="e.g. SW1A 1AA" />
+                    <ValidationMessage For="() => _model.AddressPostcode" class="elect-validation-message" />
+                </div>
+                <div class="elect-field">
+                    <label class="elect-label" for="addrCountry">Country</label>
+                    <InputText id="addrCountry" class="elect-input" @bind-Value="_model.AddressCountry" placeholder="GB" maxlength="2" />
+                    <ValidationMessage For="() => _model.AddressCountry" class="elect-validation-message" />
+                </div>
+            </div>
+        </div>
+
+        <div class="elect-form-section">
+            <p class="elect-form-section-title">Group Linkage (optional)</p>
+            <div class="elect-field">
+                <label class="elect-label" for="parentGroup">Parent Group</label>
+                <InputSelect id="parentGroup" class="elect-input" @bind-Value="_model.ParentGroupIdRaw">
+                    <option value="">None (standalone brand)</option>
+                    @foreach (var brand in _allBrands)
+                    {
+                        <option value="@brand.Id">@brand.TradingName</option>
+                    }
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="elect-form-actions">
+            <button type="submit" class="btn-gold-sm" disabled="@_isSubmitting">
+                @(_isSubmitting ? "Creating…" : "Create Brand")
+            </button>
+            <a href="/admin/brands" class="btn-outline">Cancel</a>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    private readonly BrandFormModel _model = new();
+    private IReadOnlyList<AgencyBrandSummaryDto> _allBrands = [];
+    private bool _isSubmitting;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await AgencyBrandAdminService.GetAllAsync(CancellationToken.None);
+        if (result.IsSuccess)
+            _allBrands = result.Value;
+    }
+
+    private void OnTradingNameInput(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? string.Empty;
+        _model.TradingName = value;
+        if (string.IsNullOrWhiteSpace(_model.AgentPersonaName))
+            _model.AgentPersonaName = value;
+    }
+
+    private async Task SubmitAsync()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        // OQ-01: default AgentPersonaName to TradingName if left blank.
+        var agentPersonaName = string.IsNullOrWhiteSpace(_model.AgentPersonaName)
+            ? _model.TradingName
+            : _model.AgentPersonaName;
+
+        Address address;
+        try
+        {
+            address = new Address(
+                _model.AddressLine1,
+                _model.AddressCity,
+                _model.AddressPostcode,
+                string.IsNullOrWhiteSpace(_model.AddressLine2) ? null : _model.AddressLine2,
+                string.IsNullOrWhiteSpace(_model.AddressCounty) ? null : _model.AddressCounty,
+                string.IsNullOrWhiteSpace(_model.AddressCountry) ? "GB" : _model.AddressCountry);
+        }
+        catch (ArgumentException ex)
+        {
+            _errorMessage = ex.Message;
+            _isSubmitting = false;
+            return;
+        }
+
+        Guid? parentGroupId = Guid.TryParse(_model.ParentGroupIdRaw, out var pg) ? pg : null;
+
+        var command = new CreateAgencyBrandCommand(
+            _model.LegalName,
+            _model.TradingName,
+            _model.CompaniesHouseNumber,
+            address,
+            _model.PrimaryContactEmail,
+            agentPersonaName,
+            string.IsNullOrWhiteSpace(_model.VatNumber) ? null : _model.VatNumber,
+            string.IsNullOrWhiteSpace(_model.GlaaLicenceNumber) ? null : _model.GlaaLicenceNumber,
+            parentGroupId);
+
+        var result = await AgencyBrandAdminService.CreateAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/admin/brands/{result.Value}");
+            return;
+        }
+
+        _errorMessage = result.Error.Message;
+        _isSubmitting = false;
+    }
+
+    private sealed class BrandFormModel
+    {
+        [Required(ErrorMessage = "Legal name is required.")]
+        [MaxLength(200)]
+        public string LegalName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Trading name is required.")]
+        [MaxLength(200)]
+        public string TradingName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Companies House number is required.")]
+        [MaxLength(10)]
+        public string CompaniesHouseNumber { get; set; } = string.Empty;
+
+        [MaxLength(20)]
+        public string? VatNumber { get; set; }
+
+        [MaxLength(50)]
+        public string? GlaaLicenceNumber { get; set; }
+
+        [Required(ErrorMessage = "Primary contact email is required.")]
+        [MaxLength(200)]
+        [EmailAddress]
+        public string PrimaryContactEmail { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string? AgentPersonaName { get; set; }
+
+        [Required(ErrorMessage = "Address line 1 is required.")]
+        [MaxLength(200)]
+        public string AddressLine1 { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string? AddressLine2 { get; set; }
+
+        [Required(ErrorMessage = "City is required.")]
+        [MaxLength(100)]
+        public string AddressCity { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string? AddressCounty { get; set; }
+
+        [Required(ErrorMessage = "Postcode is required.")]
+        [MaxLength(10)]
+        public string AddressPostcode { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Country is required.")]
+        [MaxLength(2)]
+        public string AddressCountry { get; set; } = "GB";
+
+        public string? ParentGroupIdRaw { get; set; }
+    }
+}

@@ -1,0 +1,111 @@
+@rendermode InteractiveServer
+@page "/admin/brands"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Brands — Admin — Elect CRM</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-header-title">Agency Brands</h1>
+    <a href="/admin/brands/new" class="btn-dark">Add Brand</a>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_isLoading)
+{
+    <p>Loading…</p>
+}
+else if (_brands is not null && _brands.Count == 0)
+{
+    <div class="elect-empty-state">
+        <p class="elect-empty-state-title">No brands yet</p>
+        <p class="elect-empty-state-body">Create the first agency brand to get started.</p>
+        <a href="/admin/brands/new" class="btn-dark">Add Brand</a>
+    </div>
+}
+else if (_brands is not null)
+{
+    <div class="elect-table-wrap">
+        <table class="elect-table">
+            <thead>
+                <tr>
+                    <th>Trading Name</th>
+                    <th>Legal Name</th>
+                    <th>Status</th>
+                    <th>Branches</th>
+                    <th>Onboarded</th>
+                    <th class="col-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var brand in _brands)
+                {
+                    <tr @key="brand.Id">
+                        <td>
+                            <a href="/admin/brands/@brand.Id" class="elect-detail-link">@brand.TradingName</a>
+                        </td>
+                        <td>@brand.LegalName</td>
+                        <td>
+                            <span class="elect-badge @GetStatusBadgeClass(brand.Status)">
+                                @brand.Status
+                            </span>
+                        </td>
+                        <td>@brand.BranchCount</td>
+                        <td>@brand.OnboardedAt.ToString("d MMM yyyy")</td>
+                        <td class="col-right">
+                            <div class="elect-table-actions">
+                                <a href="/admin/brands/@brand.Id" class="btn-outline">View</a>
+                                <a href="/admin/brands/@brand.Id/edit" class="btn-outline">Edit</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<AgencyBrandSummaryDto>? _brands;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var result = await AgencyBrandAdminService.GetAllAsync(CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _brands = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+
+    private static string GetStatusBadgeClass(AgencyBrandStatus status) =>
+        status switch
+        {
+            AgencyBrandStatus.Active => "elect-badge-active",
+            AgencyBrandStatus.Paused => "elect-badge-warning",
+            AgencyBrandStatus.Retired => "elect-badge-retired",
+            _ => "elect-badge-retired"
+        };
+}

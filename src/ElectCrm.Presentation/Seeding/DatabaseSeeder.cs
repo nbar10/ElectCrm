@@ -3,6 +3,7 @@ namespace ElectCrm.Presentation.Seeding;
 using System.Security.Claims;
 using ElectCrm.Application.Features.Persons;
 using ElectCrm.Domain.AgencyBrands;
+using ElectCrm.Domain.Branches;
 using ElectCrm.Domain.Candidates;
 using ElectCrm.Domain.Common.ValueObjects;
 using ElectCrm.Domain.Contacts;
@@ -22,9 +23,14 @@ public static class DatabaseSeeder
 {
     private const string Brand1Chn = "00000001";
     private const string Brand2Chn = "00000002";
+    private const string Brand3Chn = "00000003";
+    private const string Brand4Chn = "00000004";
+    private const string Brand5Chn = "00000005";
     private const string AdminEmail = "admin@elect.group";
     private const string Admin2Email = "admin2@elect.group";
     private const string AdminPasswordConfigKey = "DevSeed:AdminPassword";
+    private const string MidlandsTestUserEmail = "user@midlands-industrial.test";
+    private const string MidlandsTestUserPasswordConfigKey = "SeedData:MidlandsTestUserPassword";
 
     // Stable placeholder ClientIds — replaced when the Client slice is built.
     private static readonly Guid AcmeCorpId    = new("a0000001-0000-7000-0000-000000000001");
@@ -57,6 +63,8 @@ public static class DatabaseSeeder
         await SeedContactsAsync(brand1, brand2, dbContext, logger);
         await SeedPersonsAsync(dbContext, hashing, logger);
         await SeedCandidatesAsync(brand1, brand2, dbContext, logger);
+        await SeedAdminSliceTestDataAsync(brand1, brand2, dbContext, logger);
+        await SeedMidlandsTestUserAsync(dbContext, userManager, config, logger);
 
         logger.LogInformation("Development seed complete");
     }
@@ -99,6 +107,8 @@ public static class DatabaseSeeder
         return result.Value;
     }
 
+    // FIRST_GROUPADMIN_BOOTSTRAP — for production, create the first GroupAdmin user via the seed
+    // migration or a one-time EF data migration; do not expose a public registration path for GroupAdmin.
     private static async Task SeedAdminUserAsync(
         AgencyBrand brand,
         string email,
@@ -402,5 +412,180 @@ public static class DatabaseSeeder
             brand1Seeds.Length + brand2Seeds.Length,
             brand1Seeds.Length, brand1.TradingName,
             brand2Seeds.Length, brand2.TradingName);
+    }
+
+    private static async Task SeedAdminSliceTestDataAsync(
+        AgencyBrand brand1,
+        AgencyBrand brand2,
+        ElectCrmDbContext dbContext,
+        ILogger logger)
+    {
+        // Sentinel: brand 3 CHN is the indicator that this entire block has already run.
+        var alreadySeeded = await dbContext.AgencyBrands
+            .AnyAsync(b => b.CompaniesHouseNumber == Brand3Chn);
+
+        if (alreadySeeded)
+        {
+            logger.LogDebug("Admin slice test data already seeded — skipping");
+            return;
+        }
+
+        // ── Brands 3–5 ────────────────────────────────────────────────────────────
+
+        var brand3Result = AgencyBrand.Create(
+            legalName:            "Northern Construction Recruitment Ltd",
+            tradingName:          "Northern Construction Recruitment",
+            companiesHouseNumber: Brand3Chn,
+            registeredAddress:    new Address("14 Aire Street", "Leeds", "LS1 4PR", country: "GB"),
+            primaryContactEmail:  "admin@northernconstruction.fake",
+            agentPersonaName:     "Nova",
+            vatNumber:            "GB300000003",
+            glaaLicenceNumber:    "GLAA-NCR-2021");
+
+        if (brand3Result.IsFailure)
+            throw new InvalidOperationException($"Seed failed — brand 3: {brand3Result.Error.Message}");
+
+        var brand4Result = AgencyBrand.Create(
+            legalName:            "Midlands Industrial Staffing Ltd",
+            tradingName:          "Midlands Industrial Staffing",
+            companiesHouseNumber: Brand4Chn,
+            registeredAddress:    new Address("12 Corporation Street", "Coventry", "CV1 1GF", country: "GB"),
+            primaryContactEmail:  "admin@midlandsstaffing.fake",
+            agentPersonaName:     "Maxwell",
+            vatNumber:            "GB400000004");
+
+        if (brand4Result.IsFailure)
+            throw new InvalidOperationException($"Seed failed — brand 4: {brand4Result.Error.Message}");
+
+        var brand5Result = AgencyBrand.Create(
+            legalName:            "Legacy Recruitment Ltd",
+            tradingName:          "Legacy Brand (Acquired 2019)",
+            companiesHouseNumber: Brand5Chn,
+            registeredAddress:    new Address("3 Friar Gate", "Derby", "DE1 1BU", country: "GB"),
+            primaryContactEmail:  "admin@legacybrand.fake",
+            agentPersonaName:     "Lexi");
+
+        if (brand5Result.IsFailure)
+            throw new InvalidOperationException($"Seed failed — brand 5: {brand5Result.Error.Message}");
+
+        var brand3 = brand3Result.Value;
+        var brand4 = brand4Result.Value;
+        var brand5 = brand5Result.Value;
+
+        brand4.Pause();
+        brand5.Retire();
+
+        dbContext.AgencyBrands.Add(brand3);
+        dbContext.AgencyBrands.Add(brand4);
+        dbContext.AgencyBrands.Add(brand5);
+
+        await dbContext.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Seeded brands: '{B3}' (active), '{B4}' (paused), '{B5}' (retired)",
+            brand3.TradingName, brand4.TradingName, brand5.TradingName);
+
+        // ── Branches ──────────────────────────────────────────────────────────────
+
+        void AddBranch(AgencyBrand brand, string name, string[] postcodePrefixes, bool retired = false)
+        {
+            var address = new Address("1 " + name + " Street", name, "XX1 1XX", country: "GB");
+            var geography = GeoArea.FromPrefixes(postcodePrefixes);
+
+            var result = Branch.Create(new TenantId(brand.Id), name, address, geography);
+            if (result.IsFailure)
+                throw new InvalidOperationException(
+                    $"Seed failed — branch '{name}' for '{brand.TradingName}': {result.Error.Message}");
+
+            var branch = result.Value;
+
+            if (retired)
+                branch.Retire();
+
+            branch.ClearDomainEvents();
+            dbContext.Branches.Add(branch);
+        }
+
+        // Brand 1 (Elect Group Demo)
+        AddBranch(brand1, "London HQ",   ["EC", "E", "N", "NW", "SE", "SW", "W", "WC"]);
+        AddBranch(brand1, "Manchester",  ["M"]);
+
+        // Brand 2 (Test Industries Demo)
+        AddBranch(brand2, "Birmingham",  ["B"]);
+
+        // Brand 3 (Northern Construction Recruitment)
+        AddBranch(brand3, "Leeds",       ["LS"]);
+        AddBranch(brand3, "Sheffield",   ["S"]);
+        AddBranch(brand3, "Hull",        ["HU"], retired: true);
+
+        // Brand 4 (Midlands Industrial Staffing — paused brand, active branch)
+        AddBranch(brand4, "Coventry",    ["CV"]);
+
+        await dbContext.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Seeded 7 branches: 2 for '{B1}', 1 for '{B2}', 3 for '{B3}' (1 retired), 1 for '{B4}'",
+            brand1.TradingName, brand2.TradingName, brand3.TradingName, brand4.TradingName);
+    }
+
+    // Exists solely to exercise the login-block fix: a regular user whose brand is paused
+    // should see the friendly suspension message, not a generic error page.
+    private static async Task SeedMidlandsTestUserAsync(
+        ElectCrmDbContext dbContext,
+        UserManager<ApplicationUser> userManager,
+        IConfiguration config,
+        ILogger logger)
+    {
+        if (await userManager.FindByEmailAsync(MidlandsTestUserEmail) is not null)
+        {
+            logger.LogDebug("User {Email} already exists — skipping", MidlandsTestUserEmail);
+            return;
+        }
+
+        var password = config[MidlandsTestUserPasswordConfigKey];
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            logger.LogWarning(
+                "User {Email} not seeded — '{Key}' is missing from user-secrets. " +
+                "Set it with: dotnet user-secrets set \"{Key}\" \"<password>\" --project src/ElectCrm.Presentation",
+                MidlandsTestUserEmail, MidlandsTestUserPasswordConfigKey, MidlandsTestUserPasswordConfigKey);
+            return;
+        }
+
+        var brand4 = await dbContext.AgencyBrands
+            .FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand4Chn);
+
+        if (brand4 is null)
+        {
+            logger.LogWarning(
+                "User {Email} not seeded — Brand 4 (Midlands Industrial Staffing) not found. " +
+                "Ensure SeedAdminSliceTestDataAsync has run first.",
+                MidlandsTestUserEmail);
+            return;
+        }
+
+        var userResult = User.Create(new TenantId(brand4.Id), "Midlands Test User", MidlandsTestUserEmail);
+        if (userResult.IsFailure)
+            throw new InvalidOperationException(
+                $"Seed failed — could not create domain user {MidlandsTestUserEmail}: {userResult.Error.Message}");
+
+        dbContext.Users.Add(userResult.Value);
+
+        var appUser = new ApplicationUser
+        {
+            DomainUserId = userResult.Value.Id,
+            Email        = MidlandsTestUserEmail,
+            UserName     = MidlandsTestUserEmail,
+        };
+
+        var createResult = await userManager.CreateAsync(appUser, password);
+        if (!createResult.Succeeded)
+            throw new InvalidOperationException(
+                $"Seed failed — could not create ApplicationUser {MidlandsTestUserEmail}: " +
+                $"{string.Join(", ", createResult.Errors.Select(e => e.Description))}");
+
+        logger.LogInformation(
+            "Seeded test user {Email} linked to '{Brand}' (paused) — no admin claims",
+            MidlandsTestUserEmail, brand4.TradingName);
     }
 }

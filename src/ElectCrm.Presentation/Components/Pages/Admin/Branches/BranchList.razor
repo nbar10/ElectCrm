@@ -1,0 +1,113 @@
+@rendermode InteractiveServer
+@page "/admin/brands/{BrandId:guid}/branches"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject BranchAdminService BranchAdminService
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Branches — Admin — Elect CRM</PageTitle>
+
+<nav style="font-size: 0.8125rem; color: var(--fg-2); margin-bottom: var(--space-4);">
+    <a href="/admin/brands" class="elect-detail-link">Admin</a>
+    <span style="margin: 0 var(--space-2);">›</span>
+    <a href="/admin/brands" class="elect-detail-link">Brands</a>
+    <span style="margin: 0 var(--space-2);">›</span>
+    <a href="/admin/brands/@BrandId" class="elect-detail-link">@_brandName</a>
+    <span style="margin: 0 var(--space-2);">›</span>
+    <span>Branches</span>
+</nav>
+
+<div class="page-header">
+    <h1 class="page-header-title">Branches — @_brandName</h1>
+    <a href="/admin/brands/@BrandId/branches/new" class="btn-dark">Add Branch</a>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_isLoading)
+{
+    <p>Loading…</p>
+}
+else if (_branches is not null && _branches.Count == 0)
+{
+    <div class="elect-empty-state">
+        <p class="elect-empty-state-title">No branches yet</p>
+        <p class="elect-empty-state-body">Create the first branch for this brand.</p>
+        <a href="/admin/brands/@BrandId/branches/new" class="btn-dark">Add Branch</a>
+    </div>
+}
+else if (_branches is not null)
+{
+    <div class="elect-table-wrap">
+        <table class="elect-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Postcode Prefixes</th>
+                    <th class="col-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var branch in _branches)
+                {
+                    <tr @key="branch.Id">
+                        <td>@branch.Name</td>
+                        <td>
+                            <span class="elect-badge @(branch.Status == BranchStatus.Active ? "elect-badge-active" : "elect-badge-retired")">
+                                @branch.Status
+                            </span>
+                        </td>
+                        <td>@(branch.PostcodePrefixes.Count > 0 ? string.Join(", ", branch.PostcodePrefixes) : "—")</td>
+                        <td class="col-right">
+                            <div class="elect-table-actions">
+                                <a href="/admin/brands/@BrandId/branches/@branch.Id/edit" class="btn-outline">Edit</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid BrandId { get; set; }
+
+    private IReadOnlyList<BranchSummaryDto>? _branches;
+    private string _brandName = string.Empty;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var brandResult = await AgencyBrandAdminService.GetByIdAsync(BrandId, CancellationToken.None);
+        if (brandResult.IsSuccess)
+            _brandName = brandResult.Value.TradingName;
+
+        var result = await BranchAdminService.GetByBrandAsync(BrandId, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _branches = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+}

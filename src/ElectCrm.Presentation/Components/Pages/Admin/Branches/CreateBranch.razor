@@ -1,0 +1,183 @@
+@rendermode InteractiveServer
+@page "/admin/brands/{BrandId:guid}/branches/new"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@inject BranchAdminService BranchAdminService
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Add Branch — Admin — Elect CRM</PageTitle>
+
+<a href="/admin/brands/@BrandId/branches" class="back-link">← Branches</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Add Branch — @_brandName</h1>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div class="elect-form-card" style="max-width: 720px;">
+    <EditForm Model="_model" OnValidSubmit="SubmitAsync">
+        <DataAnnotationsValidator />
+
+        <p class="elect-form-section-title">Identity</p>
+        <div class="elect-form-section">
+            <div class="elect-field">
+                <label class="elect-label" for="name">Branch Name</label>
+                <InputText id="name" class="elect-input" @bind-Value="_model.Name" placeholder="e.g. London City" />
+                <ValidationMessage For="() => _model.Name" class="elect-validation-message" />
+            </div>
+        </div>
+
+        <div class="elect-form-section">
+            <p class="elect-form-section-title">Address</p>
+            <div class="elect-field">
+                <label class="elect-label" for="addrLine1">Line 1</label>
+                <InputText id="addrLine1" class="elect-input" @bind-Value="_model.AddressLine1" placeholder="Street address" />
+                <ValidationMessage For="() => _model.AddressLine1" class="elect-validation-message" />
+            </div>
+
+            <div class="elect-field">
+                <label class="elect-label" for="addrLine2">Line 2 (optional)</label>
+                <InputText id="addrLine2" class="elect-input" @bind-Value="_model.AddressLine2" placeholder="Suite, floor, etc." />
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+                <div class="elect-field">
+                    <label class="elect-label" for="addrCity">City</label>
+                    <InputText id="addrCity" class="elect-input" @bind-Value="_model.AddressCity" placeholder="City" />
+                    <ValidationMessage For="() => _model.AddressCity" class="elect-validation-message" />
+                </div>
+                <div class="elect-field">
+                    <label class="elect-label" for="addrCounty">County (optional)</label>
+                    <InputText id="addrCounty" class="elect-input" @bind-Value="_model.AddressCounty" placeholder="County" />
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+                <div class="elect-field">
+                    <label class="elect-label" for="addrPostcode">Postcode</label>
+                    <InputText id="addrPostcode" class="elect-input" @bind-Value="_model.AddressPostcode" placeholder="e.g. EC1A 1BB" />
+                    <ValidationMessage For="() => _model.AddressPostcode" class="elect-validation-message" />
+                </div>
+                <div class="elect-field">
+                    <label class="elect-label" for="addrCountry">Country</label>
+                    <InputText id="addrCountry" class="elect-input" @bind-Value="_model.AddressCountry" maxlength="2" placeholder="GB" />
+                    <ValidationMessage For="() => _model.AddressCountry" class="elect-validation-message" />
+                </div>
+            </div>
+        </div>
+
+        <div class="elect-form-section">
+            <p class="elect-form-section-title">Geography</p>
+            <div class="elect-field">
+                <label class="elect-label" for="postcodePrefixes">Postcode Prefixes (optional)</label>
+                @* DS-GAP-001 — no tag-input component; using comma-separated textarea workaround *@
+                <textarea id="postcodePrefixes" class="elect-input" rows="2"
+                          @bind="_model.PostcodePrefixesRaw"
+                          placeholder="e.g. EC1, SW, E14"></textarea>
+                <small style="color: var(--fg-2); font-size: 0.8125rem;">
+                    Enter outward postcode prefixes separated by commas, e.g. EC1, SW, E14
+                </small>
+            </div>
+        </div>
+
+        <div class="elect-form-actions">
+            <button type="submit" class="btn-gold-sm" disabled="@_isSubmitting">
+                @(_isSubmitting ? "Creating…" : "Create Branch")
+            </button>
+            <a href="/admin/brands/@BrandId/branches" class="btn-outline">Cancel</a>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    [Parameter] public Guid BrandId { get; set; }
+
+    private readonly BranchFormModel _model = new();
+    private string _brandName = string.Empty;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var brandResult = await AgencyBrandAdminService.GetByIdAsync(BrandId, CancellationToken.None);
+        if (brandResult.IsSuccess)
+            _brandName = brandResult.Value.TradingName;
+    }
+
+    private async Task SubmitAsync()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        Address address;
+        try
+        {
+            address = new Address(
+                _model.AddressLine1,
+                _model.AddressCity,
+                _model.AddressPostcode,
+                string.IsNullOrWhiteSpace(_model.AddressLine2) ? null : _model.AddressLine2,
+                string.IsNullOrWhiteSpace(_model.AddressCounty) ? null : _model.AddressCounty,
+                string.IsNullOrWhiteSpace(_model.AddressCountry) ? "GB" : _model.AddressCountry);
+        }
+        catch (ArgumentException ex)
+        {
+            _errorMessage = ex.Message;
+            _isSubmitting = false;
+            return;
+        }
+
+        var prefixes = (_model.PostcodePrefixesRaw ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var geography = GeoArea.FromPrefixes(prefixes);
+
+        var command = new CreateBranchCommand(BrandId, _model.Name, address, geography);
+
+        var result = await BranchAdminService.CreateAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/admin/brands/{BrandId}/branches");
+            return;
+        }
+
+        _errorMessage = result.Error.Message;
+        _isSubmitting = false;
+    }
+
+    private sealed class BranchFormModel
+    {
+        [Required(ErrorMessage = "Branch name is required.")]
+        [MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Address line 1 is required.")]
+        [MaxLength(200)]
+        public string AddressLine1 { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string? AddressLine2 { get; set; }
+
+        [Required(ErrorMessage = "City is required.")]
+        [MaxLength(100)]
+        public string AddressCity { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string? AddressCounty { get; set; }
+
+        [Required(ErrorMessage = "Postcode is required.")]
+        [MaxLength(10)]
+        public string AddressPostcode { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Country is required.")]
+        [MaxLength(2)]
+        public string AddressCountry { get; set; } = "GB";
+
+        public string? PostcodePrefixesRaw { get; set; }
+    }
+}

@@ -1,6 +1,8 @@
 namespace ElectCrm.Infrastructure.Identity;
 
 using System.Security.Claims;
+using ElectCrm.Domain.AgencyBrands;
+using ElectCrm.Domain.Common;
 using ElectCrm.Domain.Users;
 using ElectCrm.Infrastructure.Persistence;
 using ElectCrm.Infrastructure.Tenancy;
@@ -34,6 +36,15 @@ public sealed class ElectUserClaimsPrincipalFactory
 
         if (domainUser is not null)
         {
+            // Block login if the brand is paused or retired.
+            // SECURITY_STAMP_SLICE — invalidate active sessions when brand is paused/retired.
+            var brand = await _dbContext.AgencyBrands
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(b => b.Id == domainUser.AgencyBrandId);
+
+            if (brand is not null && brand.Status != AgencyBrandStatus.Active)
+                throw new BrandInactiveException();
+
             identity.AddClaim(new Claim(
                 TenantContextAccessor.AgencyBrandIdClaimType,
                 domainUser.AgencyBrandId.ToString()));
