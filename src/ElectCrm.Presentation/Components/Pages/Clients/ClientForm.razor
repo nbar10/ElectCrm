@@ -1,0 +1,98 @@
+@* Non-routable form component — no @page directive, inherits rendermode from parent *@
+
+@if (ErrorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@ErrorMessage</div>
+}
+
+<EditForm Model="_form" OnValidSubmit="HandleValidSubmit">
+    <DataAnnotationsValidator />
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Identity</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="legalName">Legal Name <span aria-hidden="true">*</span></label>
+            <InputText id="legalName" class="elect-input" @bind-Value="_form.LegalName" placeholder="Acme Contractors Ltd" />
+            <ValidationMessage For="() => _form.LegalName" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="tradingName">Trading Name</label>
+            <InputText id="tradingName" class="elect-input" @bind-Value="_form.TradingName" placeholder="Acme" />
+            <ValidationMessage For="() => _form.TradingName" class="elect-validation-message" />
+        </div>
+    </div>
+
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Branch</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="branchId">Primary Branch <span aria-hidden="true">*</span></label>
+            <InputSelect id="branchId" class="elect-input" @bind-Value="_form.PrimaryBranchId">
+                <option value="@Guid.Empty">— select branch —</option>
+                @if (Branches is not null)
+                {
+                    @foreach (var branch in Branches)
+                    {
+                        <option value="@branch.Id">@branch.Name</option>
+                    }
+                }
+            </InputSelect>
+        </div>
+    </div>
+
+    <div class="elect-form-actions">
+        <button type="submit" class="btn-gold-sm" disabled="@IsSubmitting">
+            @(IsSubmitting ? "Saving…" : SubmitLabel)
+        </button>
+        @if (CancelHref is not null)
+        {
+            <a href="@CancelHref" class="btn-outline">Cancel</a>
+        }
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public CreateClientCommand Model { get; set; } = new(Guid.Empty, string.Empty, null);
+    [Parameter, EditorRequired] public EventCallback<CreateClientCommand> OnValidSubmit { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public string SubmitLabel { get; set; } = "Save Client";
+    [Parameter] public string? CancelHref { get; set; }
+    [Parameter] public IReadOnlyList<BranchSummaryDto>? Branches { get; set; }
+
+    private sealed class FormModel
+    {
+        public Guid PrimaryBranchId { get; set; }
+        [Required, MaxLength(200)] public string LegalName { get; set; } = string.Empty;
+        [MaxLength(200)] public string? TradingName { get; set; }
+    }
+
+    private FormModel _form = new();
+    private CreateClientCommand? _lastModel;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastModel, Model))
+            return;
+
+        _lastModel = Model;
+        _form = new FormModel
+        {
+            PrimaryBranchId = Model.PrimaryBranchId,
+            LegalName = Model.LegalName,
+            TradingName = Model.TradingName,
+        };
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var command = new CreateClientCommand(
+            _form.PrimaryBranchId,
+            _form.LegalName,
+            string.IsNullOrWhiteSpace(_form.TradingName) ? null : _form.TradingName);
+
+        await OnValidSubmit.InvokeAsync(command);
+    }
+}

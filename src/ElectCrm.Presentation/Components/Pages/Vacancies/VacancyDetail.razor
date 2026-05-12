@@ -1,0 +1,507 @@
+@rendermode InteractiveServer
+@page "/app/vacancies/{Id:guid}"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject VacancyService VacancyService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_vacancy?.RoleTitle ?? "Vacancy") — Elect CRM</PageTitle>
+
+<a href="/app/vacancies" class="back-link">← Vacancies</a>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_rateError is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_rateError</div>
+}
+
+@if (_vacancy is not null)
+{
+    @* Status Action confirm rows *@
+    @if (_showCancelForm)
+    {
+        <div class="elect-confirm-row">
+            <span class="elect-confirm-row-msg">Cancel this vacancy?</span>
+            <textarea class="elect-input" rows="2" placeholder="Reason (optional)" @bind="_statusReason" style="flex: 1; min-width: 200px;"></textarea>
+            <button class="btn-danger" @onclick="CancelVacancyAsync">Confirm Cancel</button>
+            <button class="btn-outline" @onclick="() => _showCancelForm = false">Cancel</button>
+        </div>
+    }
+
+    @if (_showCloseForm)
+    {
+        <div class="elect-confirm-row">
+            <span class="elect-confirm-row-msg">Close this vacancy as unfilled?</span>
+            <textarea class="elect-input" rows="2" placeholder="Reason (optional)" @bind="_statusReason" style="flex: 1; min-width: 200px;"></textarea>
+            <button class="btn-danger" @onclick="CloseUnfilledAsync">Confirm Close</button>
+            <button class="btn-outline" @onclick="() => _showCloseForm = false">Cancel</button>
+        </div>
+    }
+
+    @if (_showReopenForm)
+    {
+        <div class="elect-confirm-row">
+            <span class="elect-confirm-row-msg">Reopen this vacancy? Optionally specify new headcount.</span>
+            <InputNumber class="elect-input" @bind-Value="_newHeadcount" min="1" style="width: 80px;" />
+            <button class="btn-gold" @onclick="ReopenVacancyAsync">Confirm Reopen</button>
+            <button class="btn-outline" @onclick="() => _showReopenForm = false">Cancel</button>
+        </div>
+    }
+
+    <div class="elect-detail-card">
+        @* Header *@
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <p style="font-size: 0.75rem; color: var(--fg-2); letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 var(--space-1);">
+                    @_vacancy.ReferenceNumber
+                </p>
+                <h1 class="elect-contact-name">@_vacancy.RoleTitle</h1>
+            </div>
+            @* DS-GAP — no Filled badge variant; using elect-badge-info *@
+            <span class="elect-badge @VacancyBadgeClass(_vacancy.Status)">
+                @_vacancy.Status
+            </span>
+        </div>
+
+        <div class="elect-detail-body">
+
+            @* Assignment section *@
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Client</span>
+                <span class="elect-detail-value">
+                    <a href="/app/clients/@_vacancy.ClientId" class="elect-detail-link">@_vacancy.ClientName</a>
+                </span>
+
+                <span class="elect-detail-label">Branch</span>
+                <span class="elect-detail-value">@_vacancy.BranchName</span>
+
+                <span class="elect-detail-label">Consultant Owner</span>
+                <span class="elect-detail-value">
+                    @(_vacancy.ConsultantOwnerName ?? "—")
+                    <button class="btn-outline" style="margin-left: var(--space-2); font-size: 0.8125rem; padding: var(--space-1) var(--space-2);"
+                            @onclick="() => _showReassign = !_showReassign">
+                        Reassign
+                    </button>
+                </span>
+            </div>
+
+            @* DS-GAP-006 — raw GUID input for reassignment *@
+            @if (_showReassign)
+            {
+                <div class="elect-form-section" style="margin-top: var(--space-3);">
+                    <input class="elect-input" type="text" placeholder="00000000-0000-0000-0000-000000000000"
+                           @bind="_reassignGuid" />
+                    <div style="display: flex; gap: var(--space-2); margin-top: var(--space-2);">
+                        <button class="btn-gold-sm" @onclick="ReassignOwnerAsync">Assign</button>
+                        <button class="btn-outline" @onclick="() => _showReassign = false">Cancel</button>
+                    </div>
+                    @if (_reassignError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_reassignError</div>
+                    }
+                </div>
+            }
+
+            @* Role section *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Description</span>
+                <span class="elect-detail-value" style="white-space: pre-wrap;">@(_vacancy.Description ?? "—")</span>
+
+                <span class="elect-detail-label">Required Cards</span>
+                @* CARDS_SLICE *@
+                <span class="elect-detail-value">@(_vacancy.RequiredCards ?? "—")</span>
+
+                <span class="elect-detail-label">Shift Pattern</span>
+                @* SHIFT_PATTERN_SLICE *@
+                <span class="elect-detail-value">@(_vacancy.ShiftPattern ?? "—")</span>
+            </div>
+
+            @* Location section *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Postcode</span>
+                <span class="elect-detail-value">@_vacancy.LocationPostcode</span>
+
+                <span class="elect-detail-label">Site Description</span>
+                <span class="elect-detail-value">@(_vacancy.LocationDescription ?? "—")</span>
+            </div>
+
+            @* Schedule section *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Start Date</span>
+                <span class="elect-detail-value">@(_vacancy.StartDate.HasValue ? _vacancy.StartDate.Value.ToString("d MMM yyyy") : "—")</span>
+
+                <span class="elect-detail-label">Expected End Date</span>
+                <span class="elect-detail-value">@(_vacancy.ExpectedEndDate.HasValue ? _vacancy.ExpectedEndDate.Value.ToString("d MMM yyyy") : "—")</span>
+
+                <span class="elect-detail-label">Headcount Required</span>
+                <span class="elect-detail-value">@_vacancy.HeadcountRequired</span>
+            </div>
+
+            @* Pay Rate section *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Pay Rate</span>
+                <span class="elect-detail-value">@_vacancy.PayRateAmount.ToString("C") @_vacancy.PayRateCurrency</span>
+
+                <span class="elect-detail-label">Engagement Type</span>
+                <span class="elect-detail-value">@_vacancy.EngagementType</span>
+
+                <span class="elect-detail-label">Holiday Pay Inclusive</span>
+                <span class="elect-detail-value">@(_vacancy.HolidayPayInclusive ? "Yes" : "No")</span>
+
+                @if (_vacancy.HolidayPayRate.HasValue)
+                {
+                    <span class="elect-detail-label">Holiday Pay Rate</span>
+                    <span class="elect-detail-value">@_vacancy.HolidayPayRate.Value.ToString("C")</span>
+                }
+            </div>
+
+            @* Bill Rate — admins only *@
+            @if (_isAdmin)
+            {
+                <div class="elect-detail-grid" style="margin-top: var(--space-2);">
+                    <span class="elect-detail-label">Internal: Bill Rate</span>
+                    <span class="elect-detail-value">
+                        @(_vacancy.BillRate.HasValue ? _vacancy.BillRate.Value.ToString("C") : "—")
+                    </span>
+                </div>
+            }
+
+            @* Audit section *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Created At</span>
+                <span class="elect-detail-value">@_vacancy.CreatedAt.ToString("d MMM yyyy HH:mm")</span>
+
+                <span class="elect-detail-label">Updated At</span>
+                <span class="elect-detail-value">@_vacancy.UpdatedAt.ToString("d MMM yyyy HH:mm")</span>
+
+                <span class="elect-detail-label">Created From</span>
+                <span class="elect-detail-value">@_vacancy.CreatedFrom</span>
+            </div>
+
+            @* Status Actions — DS-GAP-009 *@
+            @if (_vacancy.Status == VacancyStatus.Draft)
+            {
+                <div class="elect-detail-actions" style="margin-top: var(--space-4);">
+                    <p class="elect-form-section-title">Actions</p>
+                    <button class="btn-gold" @onclick="OpenVacancyAsync">Open Vacancy</button>
+                    <button class="btn-outline" @onclick="() => { _showCancelForm = true; _statusReason = null; }">Cancel Brief</button>
+                </div>
+            }
+            else if (_vacancy.Status == VacancyStatus.Open)
+            {
+                <div class="elect-detail-actions" style="margin-top: var(--space-4);">
+                    <p class="elect-form-section-title">Actions</p>
+                    <button class="btn-dark" @onclick="MarkFilledAsync">Mark Filled</button>
+                    <button class="btn-outline" @onclick="() => { _showCloseForm = true; _statusReason = null; }">Close Unfilled</button>
+                    <button class="btn-outline" @onclick="() => { _showCancelForm = true; _statusReason = null; }">Cancel Vacancy</button>
+                </div>
+            }
+            else if (_vacancy.Status == VacancyStatus.Filled)
+            {
+                <div class="elect-detail-actions" style="margin-top: var(--space-4);">
+                    <p class="elect-form-section-title">Actions</p>
+                    <button class="btn-outline" @onclick="() => { _showReopenForm = true; _newHeadcount = null; }">Reopen (more workers needed)</button>
+                </div>
+            }
+            else if (_vacancy.Status == VacancyStatus.ClosedUnfilled || _vacancy.Status == VacancyStatus.Cancelled)
+            {
+                <div class="elect-alert elect-alert-info" style="margin-top: var(--space-4);">
+                    @_vacancy.Status — @(_vacancy.StatusReason ?? "No reason recorded.")
+                </div>
+            }
+
+            @* Rate Edit Panel — DS-GAP-008 *@
+            <details class="elect-detail-section" style="margin-top: var(--space-4);">
+                <summary style="cursor: pointer; font-weight: 600; padding: var(--space-2) 0;">Edit Pay Rate</summary>
+                @if (!(_vacancy.Status == VacancyStatus.ClosedUnfilled || _vacancy.Status == VacancyStatus.Cancelled))
+                {
+                    <div class="elect-form-section">
+                        <div class="elect-field">
+                            <label class="elect-label">Pay Rate Amount</label>
+                            <input type="number" step="0.01" class="elect-input" @bind="_rateForm.PayRateAmount" />
+                        </div>
+                        <div class="elect-field">
+                            <label class="elect-label">Currency</label>
+                            <input type="text" maxlength="3" class="elect-input" @bind="_rateForm.PayRateCurrency" />
+                        </div>
+                        <div class="elect-field">
+                            <label class="elect-label">Engagement Type</label>
+                            <InputSelect class="elect-input" @bind-Value="_rateForm.EngagementType">
+                                @foreach (var et in Enum.GetValues<EngagementType>())
+                                {
+                                    <option value="@et">@et</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="elect-field" style="flex-direction: row; gap: var(--space-3); align-items: center;">
+                            <input type="checkbox" id="hpInc" @bind="_rateForm.HolidayPayInclusive" />
+                            <label class="elect-label" for="hpInc" style="margin: 0;">Holiday Pay Inclusive</label>
+                        </div>
+                        @if (!_rateForm.HolidayPayInclusive)
+                        {
+                            <div class="elect-field">
+                                <label class="elect-label">Holiday Pay Rate</label>
+                                <input type="number" step="0.01" class="elect-input" @bind="_rateForm.HolidayPayRate" />
+                            </div>
+                        }
+                        @if (_isAdmin)
+                        {
+                            <div class="elect-field">
+                                <label class="elect-label">Internal: Bill Rate</label>
+                                <input type="number" step="0.01" class="elect-input" @bind="_rateForm.BillRate" />
+                            </div>
+                        }
+                        <div class="elect-form-actions">
+                            <button class="btn-gold-sm" @onclick="UpdateRateAsync" disabled="@_rateSubmitting">
+                                @(_rateSubmitting ? "Saving…" : "Save Rate")
+                            </button>
+                        </div>
+                        @if (_rateError is not null)
+                        {
+                            <div class="elect-alert elect-alert-error" role="alert">@_rateError</div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p style="color: var(--fg-2);">Rate cannot be changed on a closed or cancelled vacancy.</p>
+                }
+            </details>
+
+            @* Edit link — shown if not terminal *@
+            @if (_vacancy.Status != VacancyStatus.ClosedUnfilled && _vacancy.Status != VacancyStatus.Cancelled)
+            {
+                <div class="elect-detail-actions" style="margin-top: var(--space-4);">
+                    <a href="/app/vacancies/@Id/edit" class="btn-dark">Edit Details</a>
+                </div>
+            }
+
+            @* Out-of-scope placeholders *@
+            @* PLACEMENT_SLICE — Active Placements panel goes here *@
+            @* DISTRIBUTION_SLICE — Distribution status and channel posts panel goes here *@
+            @* COMPLIANCE_SLICE — Compliance validation results panel goes here *@
+            @* AWR_SLICE — AWR period tracking goes here *@
+            @* VACANCY_TEMPLATES_SLICE — Duplicate vacancy action goes here *@
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private sealed class RateFormModel
+    {
+        public decimal PayRateAmount { get; set; }
+        public string PayRateCurrency { get; set; } = "GBP";
+        public EngagementType EngagementType { get; set; } = EngagementType.PAYE;
+        public bool HolidayPayInclusive { get; set; }
+        public decimal? HolidayPayRate { get; set; }
+        public decimal? BillRate { get; set; }
+    }
+
+    private VacancyDetailDto? _vacancy;
+    private bool _isAdmin;
+    private string? _errorMessage;
+    private string? _rateError;
+    private bool _rateSubmitting;
+    private readonly RateFormModel _rateForm = new();
+
+    private bool _showReassign;
+    private string _reassignGuid = string.Empty;
+    private string? _reassignError;
+
+    private bool _showCancelForm;
+    private bool _showCloseForm;
+    private bool _showReopenForm;
+    private string? _statusReason;
+    private int? _newHeadcount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await VacancyService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/vacancies");
+            return;
+        }
+
+        _vacancy = result.Value;
+        InitRateForm();
+
+        // AuthState cascade may be null during the SSR prerender pass — guard and retry in OnAfterRenderAsync.
+        if (AuthState is not null)
+            await ResolveAdminAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _isAdmin || AuthState is null)
+            return;
+
+        await ResolveAdminAsync();
+        StateHasChanged();
+    }
+
+    private async Task ResolveAdminAsync()
+    {
+        var auth = await AuthState;
+        _isAdmin = auth.User.Claims.Any(c =>
+            c.Type == ElectClaimTypes.Role &&
+            (c.Value.StartsWith("BrandAdmin", StringComparison.Ordinal) ||
+             c.Value.StartsWith("GroupAdmin", StringComparison.Ordinal)));
+    }
+
+    private void InitRateForm()
+    {
+        if (_vacancy is null)
+            return;
+
+        _rateForm.PayRateAmount = _vacancy.PayRateAmount;
+        _rateForm.PayRateCurrency = _vacancy.PayRateCurrency;
+        _rateForm.EngagementType = _vacancy.EngagementType;
+        _rateForm.HolidayPayInclusive = _vacancy.HolidayPayInclusive;
+        _rateForm.HolidayPayRate = _vacancy.HolidayPayRate;
+        _rateForm.BillRate = _vacancy.BillRate;
+    }
+
+    private async Task ReloadAsync()
+    {
+        var result = await VacancyService.GetByIdAsync(Id, CancellationToken.None);
+        if (result.IsSuccess)
+        {
+            _vacancy = result.Value;
+            InitRateForm();
+        }
+    }
+
+    private async Task ReassignOwnerAsync()
+    {
+        _reassignError = null;
+        Guid? parsedGuid = Guid.TryParse(_reassignGuid, out var g) && g != Guid.Empty ? g : null;
+
+        var result = await VacancyService.UpdateOwnerAsync(
+            Id,
+            new UpdateVacancyOwnerCommand(parsedGuid),
+            CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _showReassign = false;
+            _reassignGuid = string.Empty;
+            await ReloadAsync();
+        }
+        else
+        {
+            _reassignError = result.Error.Message;
+        }
+    }
+
+    private async Task OpenVacancyAsync()
+    {
+        var result = await VacancyService.ChangeStatusAsync(
+            Id,
+            new ChangeVacancyStatusCommand(VacancyStatus.Open, null, null),
+            CancellationToken.None);
+
+        if (result.IsSuccess)
+            await ReloadAsync();
+        else
+            _errorMessage = result.Error.Message;
+    }
+
+    private async Task MarkFilledAsync()
+    {
+        var result = await VacancyService.ChangeStatusAsync(
+            Id,
+            new ChangeVacancyStatusCommand(VacancyStatus.Filled, null, null),
+            CancellationToken.None);
+
+        if (result.IsSuccess)
+            await ReloadAsync();
+        else
+            _errorMessage = result.Error.Message;
+    }
+
+    private async Task CloseUnfilledAsync()
+    {
+        var result = await VacancyService.ChangeStatusAsync(
+            Id,
+            new ChangeVacancyStatusCommand(VacancyStatus.ClosedUnfilled, _statusReason, null),
+            CancellationToken.None);
+
+        _showCloseForm = false;
+        if (result.IsSuccess)
+            await ReloadAsync();
+        else
+            _errorMessage = result.Error.Message;
+    }
+
+    private async Task CancelVacancyAsync()
+    {
+        var result = await VacancyService.ChangeStatusAsync(
+            Id,
+            new ChangeVacancyStatusCommand(VacancyStatus.Cancelled, _statusReason, null),
+            CancellationToken.None);
+
+        _showCancelForm = false;
+        if (result.IsSuccess)
+            await ReloadAsync();
+        else
+            _errorMessage = result.Error.Message;
+    }
+
+    private async Task ReopenVacancyAsync()
+    {
+        var result = await VacancyService.ChangeStatusAsync(
+            Id,
+            new ChangeVacancyStatusCommand(VacancyStatus.Open, null, _newHeadcount),
+            CancellationToken.None);
+
+        _showReopenForm = false;
+        if (result.IsSuccess)
+            await ReloadAsync();
+        else
+            _errorMessage = result.Error.Message;
+    }
+
+    private async Task UpdateRateAsync()
+    {
+        _rateSubmitting = true;
+        _rateError = null;
+
+        var command = new UpdateVacancyRateCommand(
+            _rateForm.PayRateAmount,
+            string.IsNullOrWhiteSpace(_rateForm.PayRateCurrency) ? "GBP" : _rateForm.PayRateCurrency,
+            _rateForm.EngagementType,
+            _rateForm.HolidayPayInclusive,
+            _rateForm.HolidayPayInclusive ? null : _rateForm.HolidayPayRate,
+            _rateForm.BillRate);
+
+        var result = await VacancyService.UpdateRateAsync(Id, command, CancellationToken.None);
+
+        _rateSubmitting = false;
+
+        if (result.IsSuccess)
+            await ReloadAsync();
+        else
+            _rateError = result.Error.Message;
+    }
+
+    private static string VacancyBadgeClass(VacancyStatus status) => status switch
+    {
+        VacancyStatus.Draft => "elect-badge",
+        VacancyStatus.Open => "elect-badge-active",
+        VacancyStatus.Filled => "elect-badge-info",
+        VacancyStatus.ClosedUnfilled => "elect-badge-retired",
+        VacancyStatus.Cancelled => "elect-badge-retired",
+        _ => string.Empty,
+    };
+}

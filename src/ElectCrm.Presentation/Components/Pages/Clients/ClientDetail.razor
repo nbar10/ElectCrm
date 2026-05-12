@@ -1,0 +1,220 @@
+@rendermode InteractiveServer
+@page "/app/clients/{Id:guid}"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject ClientService ClientService
+@inject VacancyService VacancyService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_client?.LegalName ?? "Client") — Elect CRM</PageTitle>
+
+<a href="/app/clients" class="back-link">← Clients</a>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_confirmDelete)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg">Delete @_client?.LegalName? This cannot be undone.</span>
+        <button class="btn-danger" @onclick="ConfirmDeleteAsync">Delete</button>
+        <button class="btn-outline" @onclick="() => _confirmDelete = false">Cancel</button>
+    </div>
+}
+
+@if (_pendingStatus.HasValue)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg">Change status to @_pendingStatus?</span>
+        <button class="btn-gold" @onclick="ConfirmStatusChangeAsync">Confirm</button>
+        <button class="btn-outline" @onclick="() => _pendingStatus = null">Cancel</button>
+    </div>
+}
+
+@if (_client is not null)
+{
+    <div class="elect-detail-card">
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <h1 class="elect-contact-name">@_client.LegalName</h1>
+                @if (_client.TradingName is not null)
+                {
+                    <p class="elect-contact-role">@_client.TradingName</p>
+                }
+            </div>
+            <span class="elect-badge @BadgeClass(_client.Status)">
+                @_client.Status
+            </span>
+        </div>
+
+        <div class="elect-detail-body">
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Primary Branch</span>
+                <span class="elect-detail-value">@_client.PrimaryBranchName</span>
+
+                <span class="elect-detail-label">Status</span>
+                <span class="elect-detail-value">@_client.Status</span>
+
+                <span class="elect-detail-label">Created</span>
+                <span class="elect-detail-value">@_client.CreatedAt.ToString("d MMM yyyy")</span>
+
+                <span class="elect-detail-label">Updated</span>
+                <span class="elect-detail-value">@_client.UpdatedAt.ToString("d MMM yyyy")</span>
+            </div>
+
+            <div class="elect-detail-actions">
+                @if (_client.Status == ClientStatus.Active)
+                {
+                    <button class="btn-outline" @onclick="() => _pendingStatus = ClientStatus.Paused">Pause</button>
+                    <button class="btn-outline" @onclick="() => _pendingStatus = ClientStatus.Retired">Retire</button>
+                }
+                else if (_client.Status == ClientStatus.Paused)
+                {
+                    <button class="btn-gold" @onclick="() => _pendingStatus = ClientStatus.Active">Reactivate</button>
+                    <button class="btn-outline" @onclick="() => _pendingStatus = ClientStatus.Retired">Retire</button>
+                }
+                else if (_client.Status == ClientStatus.Retired)
+                {
+                    <p style="color: var(--fg-2);">Retired — no further actions available</p>
+                }
+
+                <a href="/app/clients/@Id/edit" class="btn-dark">Edit</a>
+                <button class="btn-danger" @onclick="() => _confirmDelete = true">Delete</button>
+            </div>
+
+            @* Active Vacancies panel *@
+            <div style="margin-top: var(--space-6);">
+                <p class="elect-form-section-title">Active Vacancies</p>
+
+                @if (_vacanciesLoading)
+                {
+                    <p>Loading vacancies…</p>
+                }
+                else if (_vacancies is not null && _vacancies.Count > 0)
+                {
+                    <div class="elect-table-wrap">
+                        <table class="elect-table">
+                            <thead>
+                                <tr>
+                                    <th>Reference</th>
+                                    <th>Role Title</th>
+                                    <th>Status</th>
+                                    <th>Start Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var v in _vacancies)
+                                {
+                                    <tr @key="v.Id">
+                                        <td><a href="/app/vacancies/@v.Id">@v.ReferenceNumber</a></td>
+                                        <td>@v.RoleTitle</td>
+                                        <td>
+                                            <span class="elect-badge @VacancyBadgeClass(v.Status)">
+                                                @v.Status
+                                            </span>
+                                        </td>
+                                        <td>@(v.StartDate.HasValue ? v.StartDate.Value.ToString("d MMM yyyy") : "—")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p style="color: var(--fg-2);">No active vacancies.</p>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@* CLIENT_SLICE — Full client detail: contacts, sites, credit status, rate card, PSL tier *@
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ClientDetailDto? _client;
+    private string? _errorMessage;
+    private bool _confirmDelete;
+    private ClientStatus? _pendingStatus;
+    private IReadOnlyList<VacancySummaryDto>? _vacancies;
+    private bool _vacanciesLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await ClientService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/clients");
+            return;
+        }
+
+        _client = result.Value;
+
+        var vacancyResult = await VacancyService.SearchAsync(
+            new VacancySearchQuery(null, null, null, Id, null, 1, 50),
+            CancellationToken.None);
+
+        if (vacancyResult.IsSuccess)
+            _vacancies = vacancyResult.Value.Items;
+
+        _vacanciesLoading = false;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        var result = await ClientService.SoftDeleteAsync(Id, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo("/app/clients");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _confirmDelete = false;
+        }
+    }
+
+    private async Task ConfirmStatusChangeAsync()
+    {
+        if (!_pendingStatus.HasValue)
+            return;
+
+        var result = await ClientService.ChangeStatusAsync(Id, _pendingStatus.Value, CancellationToken.None);
+
+        _pendingStatus = null;
+
+        if (result.IsSuccess)
+        {
+            var reload = await ClientService.GetByIdAsync(Id, CancellationToken.None);
+            if (reload.IsSuccess)
+                _client = reload.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+    }
+
+    private static string BadgeClass(ClientStatus status) => status switch
+    {
+        ClientStatus.Active => "elect-badge-active",
+        ClientStatus.Paused => "elect-badge-warning",
+        ClientStatus.Retired => "elect-badge-retired",
+        _ => string.Empty,
+    };
+
+    private static string VacancyBadgeClass(VacancyStatus status) => status switch
+    {
+        VacancyStatus.Draft => "elect-badge",
+        VacancyStatus.Open => "elect-badge-active",
+        VacancyStatus.Filled => "elect-badge-info",
+        VacancyStatus.ClosedUnfilled => "elect-badge-retired",
+        VacancyStatus.Cancelled => "elect-badge-retired",
+        _ => string.Empty,
+    };
+}

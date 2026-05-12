@@ -1,0 +1,91 @@
+@rendermode InteractiveServer
+@page "/app/clients/{Id:guid}/edit"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject ClientService ClientService
+@inject BranchAdminService BranchAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit Client — Elect CRM</PageTitle>
+
+<a href="/app/clients/@Id" class="back-link">← Client</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Edit Client</h1>
+</div>
+
+@if (_notFound)
+{
+    <div class="elect-alert elect-alert-error">Client not found.</div>
+}
+else if (_command is not null)
+{
+    <div class="elect-form-card">
+        <ClientForm Model="_command"
+                     OnValidSubmit="HandleSubmit"
+                     IsSubmitting="_isSubmitting"
+                     ErrorMessage="_errorMessage"
+                     SubmitLabel="Save Changes"
+                     CancelHref="@($"/app/clients/{Id}")"
+                     Branches="_branches" />
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private CreateClientCommand? _command;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private bool _notFound;
+    private IReadOnlyList<BranchSummaryDto>? _branches;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var clientResult = await ClientService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (clientResult.IsFailure)
+        {
+            _notFound = true;
+            return;
+        }
+
+        var dto = clientResult.Value;
+        _command = new CreateClientCommand(dto.PrimaryBranchId, dto.LegalName, dto.TradingName);
+
+        var auth = await AuthState;
+        var brandIdClaim = auth.User.FindFirst(ElectClaimTypes.AgencyBrandId)?.Value;
+
+        if (Guid.TryParse(brandIdClaim, out var brandId))
+        {
+            var branchResult = await BranchAdminService.GetByBrandAsync(brandId, CancellationToken.None);
+            if (branchResult.IsSuccess)
+                _branches = branchResult.Value;
+        }
+    }
+
+    private async Task HandleSubmit(CreateClientCommand command)
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        var updateCommand = new UpdateClientCommand(
+            command.LegalName,
+            string.IsNullOrWhiteSpace(command.TradingName) ? null : command.TradingName,
+            command.PrimaryBranchId);
+
+        var result = await ClientService.UpdateAsync(Id, updateCommand, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/clients/{Id}");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+}

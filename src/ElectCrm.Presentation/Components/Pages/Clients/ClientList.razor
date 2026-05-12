@@ -1,0 +1,191 @@
+@rendermode InteractiveServer
+@page "/app/clients"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject ClientService ClientService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Clients — Elect CRM</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-header-title">Clients</h1>
+    <a href="/app/clients/new" class="btn-gold">New Client</a>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_confirmDeleteId.HasValue)
+{
+    <div class="elect-confirm-row">
+        <span class="elect-confirm-row-msg">Delete this client? This cannot be undone.</span>
+        <button class="btn-danger" @onclick="ConfirmDeleteAsync">Delete</button>
+        <button class="btn-outline" @onclick="CancelDelete">Cancel</button>
+    </div>
+}
+
+<div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-4);">
+    <input type="text" class="elect-input" style="max-width: 320px;"
+           placeholder="Search clients…"
+           @bind="_searchTerm"
+           @bind:event="oninput"
+           @onkeyup="HandleSearchKeyUp" />
+    <button class="btn-outline" @onclick="ApplySearchAsync">Search</button>
+</div>
+
+@if (_isLoading)
+{
+    <p>Loading...</p>
+}
+else if (_result is not null && _result.TotalCount == 0)
+{
+    <div class="elect-empty-state">
+        <p class="elect-empty-state-title">No clients yet</p>
+        <p class="elect-empty-state-body">Add your first client to get started.</p>
+        <a href="/app/clients/new" class="btn-gold">New Client</a>
+    </div>
+}
+else if (_result is not null)
+{
+    <div class="elect-table-wrap">
+        <table class="elect-table">
+            <thead>
+                <tr>
+                    <th>Legal Name</th>
+                    <th>Trading Name</th>
+                    <th>Branch</th>
+                    <th>Status</th>
+                    <th>Active Vacancies</th>
+                    <th class="col-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var client in _result.Items)
+                {
+                    <tr @key="client.Id">
+                        <td><a href="/app/clients/@client.Id">@client.LegalName</a></td>
+                        <td>@(client.TradingName ?? "—")</td>
+                        <td>@client.PrimaryBranchName</td>
+                        <td>
+                            @* DS-GAP — no Paused badge variant; using elect-badge-warning as workaround *@
+                            <span class="elect-badge @BadgeClass(client.Status)">
+                                @client.Status
+                            </span>
+                        </td>
+                        <td>@client.ActiveVacancyCount</td>
+                        <td class="col-right">
+                            <div class="elect-table-actions">
+                                <a href="/app/clients/@client.Id/edit" class="btn-outline">Edit</a>
+                                <button class="btn-danger" @onclick="() => RequestDelete(client.Id)">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="elect-pagination">
+        <span class="elect-pagination-info">Page @_result.Page of @_result.TotalPages (@_result.TotalCount total)</span>
+        <div class="elect-pagination-controls">
+            <button class="btn-outline" @onclick="PreviousPage" disabled="@(!_result.HasPreviousPage)">Previous</button>
+            <button class="btn-outline" @onclick="NextPage" disabled="@(!_result.HasNextPage)">Next</button>
+        </div>
+    </div>
+}
+
+@code {
+    private int _page = 1;
+    private const int PageSize = 25;
+    private string? _searchTerm;
+    private PagedResult<ClientSummaryDto>? _result;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+    private Guid? _confirmDeleteId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var result = await ClientService.SearchAsync(_searchTerm, _page, PageSize, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _result = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task ApplySearchAsync()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _page = 1;
+            await LoadAsync();
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        _page--;
+        await LoadAsync();
+    }
+
+    private async Task NextPage()
+    {
+        _page++;
+        await LoadAsync();
+    }
+
+    private void RequestDelete(Guid id)
+    {
+        _confirmDeleteId = id;
+        _errorMessage = null;
+    }
+
+    private void CancelDelete()
+    {
+        _confirmDeleteId = null;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        var result = await ClientService.SoftDeleteAsync(_confirmDeleteId!.Value, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _confirmDeleteId = null;
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+    }
+
+    private static string BadgeClass(ClientStatus status) => status switch
+    {
+        ClientStatus.Active => "elect-badge-active",
+        ClientStatus.Paused => "elect-badge-warning",
+        ClientStatus.Retired => "elect-badge-retired",
+        _ => string.Empty,
+    };
+}

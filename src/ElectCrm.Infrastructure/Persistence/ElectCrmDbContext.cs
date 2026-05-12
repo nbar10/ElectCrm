@@ -3,10 +3,12 @@ namespace ElectCrm.Infrastructure.Persistence;
 using ElectCrm.Domain.AgencyBrands;
 using ElectCrm.Domain.Branches;
 using ElectCrm.Domain.Candidates;
+using ElectCrm.Domain.Clients;
 using ElectCrm.Domain.Common;
 using ElectCrm.Domain.Contacts;
 using ElectCrm.Domain.Persons;
 using ElectCrm.Domain.Users;
+using ElectCrm.Domain.Vacancies;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Shared;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -29,6 +31,8 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
     public DbSet<Candidate> Candidates => Set<Candidate>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<Person> Persons => Set<Person>();
+    public DbSet<Client> Clients => Set<Client>();
+    public DbSet<Vacancy> Vacancies => Set<Vacancy>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -68,5 +72,14 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
             e => (_tenantContext.CurrentTenantId == TenantId.Empty
                   || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value)
                  && !e.IsDeleted);
+
+        modelBuilder.Entity<Client>().HasQueryFilter(
+            e => (_tenantContext.CurrentTenantId == TenantId.Empty
+                  || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value)
+                 && !e.IsDeleted);
+
+        modelBuilder.Entity<Vacancy>().HasQueryFilter(
+            e => _tenantContext.CurrentTenantId == TenantId.Empty
+                 || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value);
     }
 }

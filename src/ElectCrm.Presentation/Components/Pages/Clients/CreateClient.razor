@@ -1,0 +1,72 @@
+@rendermode InteractiveServer
+@page "/app/clients/new"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject ClientService ClientService
+@inject BranchAdminService BranchAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>New Client — Elect CRM</PageTitle>
+
+<a href="/app/clients" class="back-link">← Clients</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">New Client</h1>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div class="elect-form-card">
+    <ClientForm Model="_command"
+                OnValidSubmit="HandleSubmit"
+                IsSubmitting="_isSubmitting"
+                ErrorMessage="_formError"
+                SubmitLabel="Create Client"
+                CancelHref="/app/clients"
+                Branches="_branches" />
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private CreateClientCommand _command = new(Guid.Empty, string.Empty, null);
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private string? _formError;
+    private IReadOnlyList<BranchSummaryDto>? _branches;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        var brandIdClaim = auth.User.FindFirst(ElectClaimTypes.AgencyBrandId)?.Value;
+
+        if (Guid.TryParse(brandIdClaim, out var brandId))
+        {
+            var result = await BranchAdminService.GetByBrandAsync(brandId, CancellationToken.None);
+            if (result.IsSuccess)
+                _branches = result.Value;
+        }
+    }
+
+    private async Task HandleSubmit(CreateClientCommand command)
+    {
+        _isSubmitting = true;
+        _formError = null;
+        _errorMessage = null;
+
+        var result = await ClientService.CreateAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/clients/{result.Value}");
+        }
+        else
+        {
+            _formError = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+}

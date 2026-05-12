@@ -1,0 +1,140 @@
+@rendermode InteractiveServer
+@page "/app/vacancies/{Id:guid}/edit"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject VacancyService VacancyService
+@inject ClientService ClientService
+@inject BranchAdminService BranchAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit Vacancy — Elect CRM</PageTitle>
+
+<a href="/app/vacancies/@Id" class="back-link">← Vacancy</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Edit Vacancy</h1>
+</div>
+
+@if (_isTerminal)
+{
+    <div class="elect-alert elect-alert-error">
+        This vacancy is @_vacancyStatus and cannot be edited.
+    </div>
+    <a href="/app/vacancies/@Id" class="btn-outline">Back to Vacancy</a>
+}
+else if (_command is not null)
+{
+    @if (_errorMessage is not null)
+    {
+        <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+    }
+
+    <div class="elect-form-card">
+        @* Note: Rate fields are visible in the form below but are NOT submitted here.
+           Rate changes are applied from the Vacancy detail page. *@
+
+        <VacancyDetailsForm Model="_command"
+                             OnValidSubmit="HandleSubmit"
+                             IsSubmitting="_isSubmitting"
+                             ErrorMessage="@_formError"
+                             FormName="vacancy-edit-form"
+                             SubmitLabel="Save Changes"
+                             CancelHref="@($"/app/vacancies/{Id}")"
+                             Branches="_branches"
+                             Clients="_clients" />
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private CreateVacancyCommand? _command;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private string? _formError;
+    private bool _isTerminal;
+    private string _vacancyStatus = string.Empty;
+    private IReadOnlyList<(Guid Id, string Name)> _branches = [];
+    private IReadOnlyList<ClientSummaryDto> _clients = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await VacancyService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/vacancies");
+            return;
+        }
+
+        var dto = result.Value;
+
+        if (dto.Status == VacancyStatus.ClosedUnfilled || dto.Status == VacancyStatus.Cancelled)
+        {
+            _isTerminal = true;
+            _vacancyStatus = dto.Status.ToString();
+            return;
+        }
+
+        _command = new CreateVacancyCommand(
+            dto.BranchId,
+            dto.ClientId,
+            dto.RoleTitle,
+            dto.Description,
+            dto.LocationPostcode,
+            dto.LocationDescription,
+            dto.StartDate,
+            dto.ExpectedEndDate,
+            dto.ShiftPattern,
+            dto.PayRateAmount,
+            dto.PayRateCurrency,
+            dto.EngagementType,
+            dto.HolidayPayInclusive,
+            dto.HolidayPayRate,
+            dto.BillRate,
+            dto.HeadcountRequired,
+            dto.RequiredCards,
+            dto.ConsultantOwnerId,
+            dto.CreatedFrom);
+
+        var branchResult = await BranchAdminService.GetAllForCurrentTenantAsync(CancellationToken.None);
+        if (branchResult.IsSuccess)
+            _branches = branchResult.Value.Select(b => (b.Id, b.Name)).ToList();
+
+        var clientResult = await ClientService.SearchAsync(null, 1, 200, CancellationToken.None);
+        if (clientResult.IsSuccess)
+            _clients = clientResult.Value.Items;
+    }
+
+    private async Task HandleSubmit(CreateVacancyCommand command)
+    {
+        _isSubmitting = true;
+        _formError = null;
+        _errorMessage = null;
+
+        DateOnly? startDate = command.StartDate;
+        DateOnly? expectedEndDate = command.ExpectedEndDate;
+
+        var updateCommand = new UpdateVacancyDetailsCommand(
+            command.RoleTitle,
+            string.IsNullOrWhiteSpace(command.Description) ? null : command.Description,
+            command.LocationPostcode,
+            string.IsNullOrWhiteSpace(command.LocationDescription) ? null : command.LocationDescription,
+            startDate,
+            expectedEndDate,
+            string.IsNullOrWhiteSpace(command.ShiftPattern) ? null : command.ShiftPattern,
+            command.HeadcountRequired,
+            string.IsNullOrWhiteSpace(command.RequiredCards) ? null : command.RequiredCards);
+
+        var result = await VacancyService.UpdateDetailsAsync(Id, updateCommand, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/vacancies/{Id}");
+        }
+        else
+        {
+            _formError = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+}

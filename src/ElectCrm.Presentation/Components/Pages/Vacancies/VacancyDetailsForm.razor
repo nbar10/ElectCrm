@@ -1,0 +1,287 @@
+@* Non-routable form component — no @page directive, inherits rendermode from parent *@
+
+@if (ErrorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@ErrorMessage</div>
+}
+
+<EditForm Model="_form" OnValidSubmit="HandleValidSubmit" FormName="@FormName">
+    <DataAnnotationsValidator />
+
+    @* Section 1: Client & Branch *@
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Assignment</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="branchId">Branch <span aria-hidden="true">*</span></label>
+            <InputSelect id="branchId" class="elect-input" @bind-Value="_form.BranchId">
+                <option value="@Guid.Empty">— select branch —</option>
+                @foreach (var branch in Branches)
+                {
+                    <option value="@branch.Id">@branch.Name</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="clientId">Client <span aria-hidden="true">*</span></label>
+            @* DS-GAP-007 — <select> for client; type-ahead component needed when client list grows *@
+            <InputSelect id="clientId" class="elect-input" @bind-Value="_form.ClientId">
+                <option value="@Guid.Empty">— select client —</option>
+                @foreach (var client in Clients)
+                {
+                    <option value="@client.Id">@(client.TradingName ?? client.LegalName)</option>
+                }
+            </InputSelect>
+        </div>
+    </div>
+
+    @* Section 2: Role *@
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Role</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="roleTitle">Role Title <span aria-hidden="true">*</span></label>
+            <InputText id="roleTitle" class="elect-input" @bind-Value="_form.RoleTitle" placeholder="e.g. CSCS Labourer" />
+            <ValidationMessage For="() => _form.RoleTitle" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="description">Description</label>
+            <InputTextArea id="description" class="elect-input" @bind-Value="_form.Description" rows="6" />
+            <ValidationMessage For="() => _form.Description" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            @* CARDS_SLICE *@
+            <label class="elect-label" for="requiredCards">Required Cards</label>
+            <InputTextArea id="requiredCards" class="elect-input" @bind-Value="_form.RequiredCards" rows="3"
+                           placeholder="e.g. CSCS Gold, SMSTS" />
+            <ValidationMessage For="() => _form.RequiredCards" class="elect-validation-message" />
+        </div>
+    </div>
+
+    @* Section 3: Location *@
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Location</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="locationPostcode">Postcode <span aria-hidden="true">*</span></label>
+            <InputText id="locationPostcode" class="elect-input" @bind-Value="_form.LocationPostcode" placeholder="e.g. EC1A 1BB" />
+            <ValidationMessage For="() => _form.LocationPostcode" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="locationDescription">Site Description</label>
+            <InputText id="locationDescription" class="elect-input" @bind-Value="_form.LocationDescription" placeholder="e.g. Central London site" />
+            <ValidationMessage For="() => _form.LocationDescription" class="elect-validation-message" />
+        </div>
+    </div>
+
+    @* Section 4: Schedule *@
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Schedule</p>
+
+        <div class="elect-field">
+            <label class="elect-label" for="startDate">Start Date</label>
+            <input type="date" id="startDate" class="elect-input"
+                   value="@_form.StartDateText"
+                   @onchange="e => _form.StartDateText = e.Value?.ToString() ?? string.Empty" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="expectedEndDate">Expected End Date</label>
+            <input type="date" id="expectedEndDate" class="elect-input"
+                   value="@_form.ExpectedEndDateText"
+                   @onchange="e => _form.ExpectedEndDateText = e.Value?.ToString() ?? string.Empty" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="headcount">Headcount Required <span aria-hidden="true">*</span></label>
+            <InputNumber id="headcount" class="elect-input" @bind-Value="_form.HeadcountRequired" min="1" />
+            <ValidationMessage For="() => _form.HeadcountRequired" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            @* SHIFT_PATTERN_SLICE *@
+            <label class="elect-label" for="shiftPattern">Shift Pattern</label>
+            <InputText id="shiftPattern" class="elect-input" @bind-Value="_form.ShiftPattern" placeholder="e.g. Mon–Fri 07:00–16:00" />
+            <ValidationMessage For="() => _form.ShiftPattern" class="elect-validation-message" />
+        </div>
+    </div>
+
+    @* Section 5: Pay Rate *@
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Pay Rate</p>
+
+        <div class="elect-field">
+            @* DS-GAP-012 — plain InputNumber; styled currency input needed *@
+            <label class="elect-label" for="payRateAmount">Amount <span aria-hidden="true">*</span></label>
+            <InputNumber id="payRateAmount" class="elect-input" @bind-Value="_form.PayRateAmount" step="0.01" />
+            <ValidationMessage For="() => _form.PayRateAmount" class="elect-validation-message" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label" for="currency">Currency</label>
+            <InputText id="currency" class="elect-input" @bind-Value="_form.PayRateCurrency" maxlength="3" placeholder="GBP" />
+        </div>
+
+        <div class="elect-field">
+            @* DS-GAP-010 — plain radio group; unstyled *@
+            <label class="elect-label">Engagement Type <span aria-hidden="true">*</span></label>
+            <InputRadioGroup @bind-Value="_form.EngagementType">
+                @foreach (var et in Enum.GetValues<EngagementType>())
+                {
+                    <label class="elect-radio-label">
+                        <InputRadio Value="et" /> @et
+                    </label>
+                }
+            </InputRadioGroup>
+        </div>
+
+        <div class="elect-field" style="flex-direction: row; align-items: center; gap: var(--space-3);">
+            <InputCheckbox @bind-Value="_form.HolidayPayInclusive" id="holidayPayInclusive" />
+            <label class="elect-label" for="holidayPayInclusive" style="margin: 0;">Holiday Pay Inclusive</label>
+        </div>
+
+        @if (!_form.HolidayPayInclusive)
+        {
+            <div class="elect-field">
+                @* DS-GAP-012 *@
+                <label class="elect-label" for="holidayPayRate">Holiday Pay Rate</label>
+                <InputNumber id="holidayPayRate" class="elect-input" @bind-Value="_form.HolidayPayRate" step="0.01" />
+            </div>
+        }
+
+        <div class="elect-field">
+            @* DS-GAP-012 *@
+            <label class="elect-label" for="billRate">Internal: Bill Rate</label>
+            <InputNumber id="billRate" class="elect-input" @bind-Value="_form.BillRate" step="0.01" />
+        </div>
+    </div>
+
+    @* Section 6: Ownership *@
+    <div class="elect-form-section">
+        <p class="elect-form-section-title">Ownership</p>
+
+        <div class="elect-field">
+            @* DS-GAP-006 — raw GUID input; type-ahead user picker needed *@
+            <label class="elect-label" for="consultantOwner">Consultant Owner</label>
+            <InputText id="consultantOwner" class="elect-input" @bind-Value="_form.ConsultantOwnerIdText"
+                       placeholder="00000000-0000-0000-0000-000000000000" />
+            <small style="color: var(--fg-2); font-size: 0.8125rem;">Enter the consultant's user ID (UUID).</small>
+        </div>
+    </div>
+
+    <div class="elect-form-actions">
+        <button type="submit" class="btn-gold-sm" disabled="@IsSubmitting">
+            @(IsSubmitting ? "Saving…" : SubmitLabel)
+        </button>
+        @if (CancelHref is not null)
+        {
+            <a href="@CancelHref" class="btn-outline">Cancel</a>
+        }
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public CreateVacancyCommand Model { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback<CreateVacancyCommand> OnValidSubmit { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public string SubmitLabel { get; set; } = "Save";
+    [Parameter] public string? CancelHref { get; set; }
+    [Parameter] public string FormName { get; set; } = "vacancy-form";
+    [Parameter] public IReadOnlyList<(Guid Id, string Name)> Branches { get; set; } = [];
+    [Parameter] public IReadOnlyList<ClientSummaryDto> Clients { get; set; } = [];
+
+    private sealed class FormModel
+    {
+        public Guid BranchId { get; set; }
+        public Guid ClientId { get; set; }
+        [Required, MaxLength(200)] public string RoleTitle { get; set; } = string.Empty;
+        [MaxLength(5000)] public string? Description { get; set; }
+        [MaxLength(10)] public string LocationPostcode { get; set; } = string.Empty;
+        [MaxLength(200)] public string? LocationDescription { get; set; }
+        public string StartDateText { get; set; } = string.Empty;
+        public string ExpectedEndDateText { get; set; } = string.Empty;
+        [MaxLength(200)] public string? ShiftPattern { get; set; }
+        [Range(0.01, double.MaxValue, ErrorMessage = "Pay rate amount must be greater than 0.")] public decimal PayRateAmount { get; set; }
+        public string PayRateCurrency { get; set; } = "GBP";
+        public EngagementType EngagementType { get; set; } = EngagementType.PAYE;
+        public bool HolidayPayInclusive { get; set; }
+        public decimal? HolidayPayRate { get; set; }
+        public decimal? BillRate { get; set; }
+        [Range(1, int.MaxValue, ErrorMessage = "Headcount must be at least 1.")] public int HeadcountRequired { get; set; } = 1;
+        [MaxLength(500)] public string? RequiredCards { get; set; }
+        public string ConsultantOwnerIdText { get; set; } = string.Empty;
+    }
+
+    private FormModel _form = new();
+    private CreateVacancyCommand? _lastModel;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastModel, Model))
+            return;
+
+        _lastModel = Model;
+        _form = new FormModel
+        {
+            BranchId = Model.BranchId,
+            ClientId = Model.ClientId,
+            RoleTitle = Model.RoleTitle,
+            Description = Model.Description,
+            LocationPostcode = Model.LocationPostcode,
+            LocationDescription = Model.LocationDescription,
+            StartDateText = Model.StartDate.HasValue ? Model.StartDate.Value.ToString("yyyy-MM-dd") : string.Empty,
+            ExpectedEndDateText = Model.ExpectedEndDate.HasValue ? Model.ExpectedEndDate.Value.ToString("yyyy-MM-dd") : string.Empty,
+            ShiftPattern = Model.ShiftPattern,
+            PayRateAmount = Model.PayRateAmount,
+            PayRateCurrency = Model.PayRateCurrency,
+            EngagementType = Model.EngagementType,
+            HolidayPayInclusive = Model.HolidayPayInclusive,
+            HolidayPayRate = Model.HolidayPayRate,
+            BillRate = Model.BillRate,
+            HeadcountRequired = Model.HeadcountRequired,
+            RequiredCards = Model.RequiredCards,
+            ConsultantOwnerIdText = Model.ConsultantOwnerId.HasValue ? Model.ConsultantOwnerId.Value.ToString() : string.Empty,
+        };
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        DateOnly? startDate = DateOnly.TryParseExact(_form.StartDateText, "yyyy-MM-dd", null,
+            System.Globalization.DateTimeStyles.None, out var sd) ? sd : null;
+
+        DateOnly? expectedEndDate = DateOnly.TryParseExact(_form.ExpectedEndDateText, "yyyy-MM-dd", null,
+            System.Globalization.DateTimeStyles.None, out var eed) ? eed : null;
+
+        Guid? consultantOwnerId = Guid.TryParse(_form.ConsultantOwnerIdText, out var cg) && cg != Guid.Empty
+            ? cg
+            : null;
+
+        var command = new CreateVacancyCommand(
+            _form.BranchId,
+            _form.ClientId,
+            _form.RoleTitle,
+            string.IsNullOrWhiteSpace(_form.Description) ? null : _form.Description,
+            _form.LocationPostcode,
+            string.IsNullOrWhiteSpace(_form.LocationDescription) ? null : _form.LocationDescription,
+            startDate,
+            expectedEndDate,
+            string.IsNullOrWhiteSpace(_form.ShiftPattern) ? null : _form.ShiftPattern,
+            _form.PayRateAmount,
+            string.IsNullOrWhiteSpace(_form.PayRateCurrency) ? "GBP" : _form.PayRateCurrency,
+            _form.EngagementType,
+            _form.HolidayPayInclusive,
+            _form.HolidayPayInclusive ? null : _form.HolidayPayRate,
+            _form.BillRate,
+            _form.HeadcountRequired,
+            string.IsNullOrWhiteSpace(_form.RequiredCards) ? null : _form.RequiredCards,
+            consultantOwnerId,
+            Model.CreatedFrom);
+
+        await OnValidSubmit.InvokeAsync(command);
+    }
+}

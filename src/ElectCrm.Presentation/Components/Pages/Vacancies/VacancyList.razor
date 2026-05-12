@@ -1,0 +1,187 @@
+@rendermode InteractiveServer
+@page "/app/vacancies"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject VacancyService VacancyService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Vacancies — Elect CRM</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-header-title">Vacancies</h1>
+    <a href="/app/vacancies/new" class="btn-gold">New Vacancy</a>
+</div>
+
+@* BULK_IMPORT_SLICE — bulk vacancy import CTA goes here *@
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <div class="elect-field" style="margin: 0; flex: 1; min-width: 200px; max-width: 320px;">
+        <label class="elect-label" for="searchTerm">Search</label>
+        <input type="text" id="searchTerm" class="elect-input" placeholder="Role title or reference…"
+               @bind="_searchTerm"
+               @bind:event="oninput"
+               @onkeyup="HandleSearchKeyUp" />
+    </div>
+    <div class="elect-field" style="margin: 0;">
+        <label class="elect-label" for="statusFilter">Status</label>
+        <select id="statusFilter" class="elect-input" @bind="_statusFilterText">
+            <option value="">All</option>
+            @foreach (var s in Enum.GetValues<VacancyStatus>())
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+    </div>
+    <button class="btn-outline" @onclick="ApplySearchAsync">Apply</button>
+</div>
+
+@if (_isLoading)
+{
+    <p>Loading...</p>
+}
+else if (_result is not null && _result.TotalCount == 0)
+{
+    <div class="elect-empty-state">
+        <p class="elect-empty-state-title">No vacancies found</p>
+        <p class="elect-empty-state-body">Create your first vacancy to get started.</p>
+        <a href="/app/vacancies/new" class="btn-gold">New Vacancy</a>
+    </div>
+}
+else if (_result is not null)
+{
+    <div class="elect-table-wrap">
+        <table class="elect-table">
+            <thead>
+                <tr>
+                    <th>Reference</th>
+                    <th>Role Title</th>
+                    <th>Client</th>
+                    <th>Branch</th>
+                    <th>Status</th>
+                    <th>Start Date</th>
+                    <th>Pay Rate</th>
+                    <th class="col-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var vacancy in _result.Items)
+                {
+                    <tr @key="vacancy.Id">
+                        <td><a href="/app/vacancies/@vacancy.Id">@vacancy.ReferenceNumber</a></td>
+                        <td>@vacancy.RoleTitle</td>
+                        <td>@vacancy.ClientName</td>
+                        <td>@vacancy.BranchName</td>
+                        <td>
+                            @* DS-GAP — no Filled badge variant; using elect-badge-info *@
+                            <span class="elect-badge @VacancyBadgeClass(vacancy.Status)">
+                                @vacancy.Status
+                            </span>
+                        </td>
+                        <td>@(vacancy.StartDate.HasValue ? vacancy.StartDate.Value.ToString("d MMM yyyy") : "—")</td>
+                        <td>£@(vacancy.PayRateAmount.ToString("N2"))/@vacancy.EngagementType</td>
+                        <td class="col-right">
+                            <div class="elect-table-actions">
+                                <a href="/app/vacancies/@vacancy.Id" class="btn-outline">View</a>
+                                <a href="/app/vacancies/@vacancy.Id/edit" class="btn-outline">Edit</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="elect-pagination">
+        <span class="elect-pagination-info">Page @_result.Page of @_result.TotalPages (@_result.TotalCount total)</span>
+        <div class="elect-pagination-controls">
+            <button class="btn-outline" @onclick="PreviousPage" disabled="@(!_result.HasPreviousPage)">Previous</button>
+            <button class="btn-outline" @onclick="NextPage" disabled="@(!_result.HasNextPage)">Next</button>
+        </div>
+    </div>
+}
+
+@code {
+    private int _page = 1;
+    private const int PageSize = 25;
+    private string? _searchTerm;
+    private string _statusFilterText = string.Empty;
+    private VacancyStatus? StatusFilter =>
+        Enum.TryParse<VacancyStatus>(_statusFilterText, out var s) ? s : null;
+    private PagedResult<VacancySummaryDto>? _result;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var query = new VacancySearchQuery(
+            _searchTerm,
+            StatusFilter,
+            null,
+            null,
+            null,
+            _page,
+            PageSize);
+
+        var result = await VacancyService.SearchAsync(query, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _result = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task ApplySearchAsync()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _page = 1;
+            await LoadAsync();
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        _page--;
+        await LoadAsync();
+    }
+
+    private async Task NextPage()
+    {
+        _page++;
+        await LoadAsync();
+    }
+
+    private static string VacancyBadgeClass(VacancyStatus status) => status switch
+    {
+        VacancyStatus.Draft => "elect-badge",
+        VacancyStatus.Open => "elect-badge-active",
+        VacancyStatus.Filled => "elect-badge-info",
+        VacancyStatus.ClosedUnfilled => "elect-badge-retired",
+        VacancyStatus.Cancelled => "elect-badge-retired",
+        _ => string.Empty,
+    };
+}

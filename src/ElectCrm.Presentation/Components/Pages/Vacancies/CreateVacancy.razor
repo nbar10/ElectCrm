@@ -1,0 +1,111 @@
+@rendermode InteractiveServer
+@page "/app/vacancies/new"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject VacancyService VacancyService
+@inject ClientService ClientService
+@inject BranchAdminService BranchAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>New Vacancy — Elect CRM</PageTitle>
+
+<a href="/app/vacancies" class="back-link">← Vacancies</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">New Vacancy</h1>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div class="elect-form-card">
+    <div class="elect-field" style="flex-direction: row; align-items: center; gap: var(--space-3);">
+        <InputCheckbox @bind-Value="_saveAndOpen" id="saveAndOpen" />
+        <label class="elect-label" for="saveAndOpen" style="margin: 0;">Open vacancy immediately after saving</label>
+    </div>
+
+    <VacancyDetailsForm Model="_command"
+                        OnValidSubmit="HandleSubmit"
+                        IsSubmitting="_isSubmitting"
+                        ErrorMessage="@_formError"
+                        FormName="vacancy-create-form"
+                        SubmitLabel="Create Vacancy"
+                        CancelHref="/app/vacancies"
+                        Branches="_branches"
+                        Clients="_clients" />
+</div>
+
+@code {
+    // AI_ENGAGEMENT_SLICE — AI Content Agent will submit CreateVacancyCommand with CreatedFrom = AiBriefIntake
+
+    private CreateVacancyCommand _command = new(
+        Guid.Empty,
+        Guid.Empty,
+        string.Empty,
+        null,
+        string.Empty,
+        null,
+        null,
+        null,
+        null,
+        0m,
+        "GBP",
+        EngagementType.PAYE,
+        false,
+        null,
+        null,
+        1,
+        null,
+        null,
+        VacancyCreatedFrom.Manual);
+
+    private bool _isSubmitting;
+    private bool _saveAndOpen;
+    private string? _errorMessage;
+    private string? _formError;
+    private IReadOnlyList<(Guid Id, string Name)> _branches = [];
+    private IReadOnlyList<ClientSummaryDto> _clients = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var branchResult = await BranchAdminService.GetAllForCurrentTenantAsync(CancellationToken.None);
+        if (branchResult.IsSuccess)
+            _branches = branchResult.Value.Select(b => (b.Id, b.Name)).ToList();
+
+        var clientResult = await ClientService.SearchAsync(null, 1, 200, CancellationToken.None);
+        if (clientResult.IsSuccess)
+            _clients = clientResult.Value.Items;
+    }
+
+    private async Task HandleSubmit(CreateVacancyCommand command)
+    {
+        _isSubmitting = true;
+        _formError = null;
+        _errorMessage = null;
+
+        var createResult = await VacancyService.CreateAsync(command, CancellationToken.None);
+
+        if (createResult.IsFailure)
+        {
+            _formError = createResult.Error.Message;
+            _isSubmitting = false;
+            return;
+        }
+
+        var newId = createResult.Value;
+
+        if (_saveAndOpen)
+        {
+            var openResult = await VacancyService.ChangeStatusAsync(
+                newId,
+                new ChangeVacancyStatusCommand(VacancyStatus.Open, null, null),
+                CancellationToken.None);
+
+            if (openResult.IsFailure)
+                _errorMessage = $"Vacancy created but could not be opened: {openResult.Error.Message}";
+        }
+
+        NavigationManager.NavigateTo($"/app/vacancies/{newId}");
+    }
+}

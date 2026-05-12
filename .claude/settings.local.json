@@ -17,7 +17,15 @@
       "Bash(python3 -c \"import pymssql; print\\('pymssql available'\\)\")",
       "Bash(python3 -c \"import pyodbc; print\\('pyodbc available'\\)\")",
       "Bash(timeout 30 dotnet run --project src/ElectCrm.Presentation --no-build)",
-      "Bash(timeout 35 dotnet run --project src/ElectCrm.Presentation --no-build)"
+      "Bash(timeout 35 dotnet run --project src/ElectCrm.Presentation --no-build)",
+      "Bash(dotnet run *)",
+      "Bash(pkill -f \"ElectCrm.Presentation\")",
+      "Bash(tee /tmp/electcrm_seed.log)",
+      "Bash(echo \"started PID $!\")",
+      "Bash(dotnet user-secrets *)",
+      "Bash(/opt/homebrew/bin/sqlcmd *)",
+      "Bash(cat)",
+      "Bash(dotnet script *)"
     ]
   }
 }

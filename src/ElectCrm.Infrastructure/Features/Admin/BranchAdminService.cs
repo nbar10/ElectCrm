@@ -45,6 +45,23 @@ public sealed class BranchAdminService
         return Result<IReadOnlyList<BranchSummaryDto>>.Success(items);
     }
 
+    public async Task<Result<IReadOnlyList<BranchSummaryDto>>> GetAllForCurrentTenantAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Global filter handles tenant isolation — no explicit brand ID needed for single-tenant user pages.
+        var items = await _dbContext.Branches
+            .OrderBy(b => b.Name)
+            .Select(b => new BranchSummaryDto(
+                b.Id,
+                b.AgencyBrandId,
+                b.Name,
+                b.Status,
+                b.Geography.PostcodePrefixes))
+            .ToListAsync(cancellationToken);
+
+        return Result<IReadOnlyList<BranchSummaryDto>>.Success(items);
+    }
+
     public async Task<Result<BranchDetailDto>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)

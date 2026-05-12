@@ -1,14 +1,21 @@
 namespace ElectCrm.Presentation.Seeding;
 
 using System.Security.Claims;
+using ElectCrm.Application.Features.Clients;
 using ElectCrm.Application.Features.Persons;
+using ElectCrm.Application.Features.Vacancies;
 using ElectCrm.Domain.AgencyBrands;
 using ElectCrm.Domain.Branches;
 using ElectCrm.Domain.Candidates;
+using ElectCrm.Domain.Clients;
+using ElectCrm.Domain.Common;
 using ElectCrm.Domain.Common.ValueObjects;
 using ElectCrm.Domain.Contacts;
 using ElectCrm.Domain.Persons;
 using ElectCrm.Domain.Users;
+using ElectCrm.Domain.Vacancies;
+using ElectCrm.Infrastructure.Features.Clients;
+using ElectCrm.Infrastructure.Features.Vacancies;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Infrastructure.Persistence;
 using ElectCrm.Presentation.Authorization;
@@ -65,6 +72,7 @@ public static class DatabaseSeeder
         await SeedCandidatesAsync(brand1, brand2, dbContext, logger);
         await SeedAdminSliceTestDataAsync(brand1, brand2, dbContext, logger);
         await SeedMidlandsTestUserAsync(dbContext, userManager, config, logger);
+        await SeedVacancySliceTestDataAsync(sp, logger);
 
         logger.LogInformation("Development seed complete");
     }
@@ -587,5 +595,395 @@ public static class DatabaseSeeder
         logger.LogInformation(
             "Seeded test user {Email} linked to '{Brand}' (paused) — no admin claims",
             MidlandsTestUserEmail, brand4.TradingName);
+    }
+
+    private static async Task SeedVacancySliceTestDataAsync(
+        IServiceProvider sp,
+        ILogger logger)
+    {
+        var db          = sp.GetRequiredService<ElectCrmDbContext>();
+        var dispatcher  = sp.GetRequiredService<IDomainEventDispatcher>();
+        var lf          = sp.GetRequiredService<ILoggerFactory>();
+        var userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
+
+        // Load brands — IgnoreQueryFilters so no HTTP tenant context is needed.
+        var brand1 = await db.AgencyBrands.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand1Chn);
+        var brand2 = await db.AgencyBrands.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand2Chn);
+        var brand3 = await db.AgencyBrands.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand3Chn);
+
+        if (brand1 is null || brand2 is null || brand3 is null)
+        {
+            logger.LogWarning("Vacancy slice seed skipped — required brands not found. Ensure SeedAdminSliceTestDataAsync ran first.");
+            return;
+        }
+
+        // Idempotency sentinel: the last vacancy seeded is "Demolition Crew — Yorkshire Sites" for brand 3.
+        // Checking the final item means partial runs (e.g. app crash mid-seed) will re-enter and
+        // create only the missing items — each GetOrCreate helper does its own per-item check.
+        var alreadySeeded = await db.Vacancies
+            .IgnoreQueryFilters()
+            .AnyAsync(v => v.AgencyBrandId == brand3.Id && v.RoleTitle == "Demolition Crew — Yorkshire Sites");
+
+        if (alreadySeeded)
+        {
+            logger.LogDebug("Vacancy slice test data already seeded — skipping");
+            return;
+        }
+
+        // Load all branches across all tenants (IgnoreQueryFilters to include retired branches).
+        var allBranches = await db.Branches.IgnoreQueryFilters().ToListAsync();
+
+        Branch GetBranch(Guid brandId, string name) =>
+            allBranches.First(b => b.AgencyBrandId == brandId && b.Name == name);
+
+        // Look up domain user IDs via ApplicationUser.DomainUserId.
+        var adminAppUser  = await userManager.FindByEmailAsync(AdminEmail);
+        var admin2AppUser = await userManager.FindByEmailAsync(Admin2Email);
+        Guid? admin1Id = adminAppUser?.DomainUserId;
+        Guid? admin2Id = admin2AppUser?.DomainUserId;
+
+        // Wire services with a mutable seed tenant context instead of the HTTP-based accessor.
+        // This lets us set the current tenant before each service call without changing DI registration.
+        var seedCtx = new SeedTenantContext();
+        var clientService  = new ClientService(db, seedCtx, dispatcher, lf.CreateLogger<ClientService>());
+        var vacancyService = new VacancyService(db, seedCtx, dispatcher, lf.CreateLogger<VacancyService>());
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // ── BRAND 1 CLIENTS ──────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand1.Id);
+        var b1London     = GetBranch(brand1.Id, "London HQ").Id;
+        var b1Manchester = GetBranch(brand1.Id, "Manchester").Id;
+
+        var acmeId        = await GetOrCreateClientAsync(clientService, db, brand1.Id, "Acme Construction Ltd",        null, b1London,     ClientStatus.Active, logger);
+        var thamesId      = await GetOrCreateClientAsync(clientService, db, brand1.Id, "Thames Civil Engineering Ltd", null, b1London,     ClientStatus.Active, logger);
+        var manchesterId  = await GetOrCreateClientAsync(clientService, db, brand1.Id, "Manchester Build Co",          null, b1Manchester, ClientStatus.Active, logger);
+        var defunctId     = await GetOrCreateClientAsync(clientService, db, brand1.Id, "Defunct Holdings Ltd",         null, b1London,     ClientStatus.Paused, logger);
+
+        // ── BRAND 2 CLIENTS ──────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand2.Id);
+        var b2Birmingham = GetBranch(brand2.Id, "Birmingham").Id;
+
+        var birminghamId  = await GetOrCreateClientAsync(clientService, db, brand2.Id, "Birmingham Industrial Services", null, b2Birmingham, ClientStatus.Active, logger);
+        var midlandsId    = await GetOrCreateClientAsync(clientService, db, brand2.Id, "Midlands Facilities Ltd",         null, b2Birmingham, ClientStatus.Active, logger);
+
+        // ── BRAND 3 CLIENTS ──────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand3.Id);
+        var b3Leeds    = GetBranch(brand3.Id, "Leeds").Id;
+        var b3Sheffield = GetBranch(brand3.Id, "Sheffield").Id;
+
+        var yorkshireId  = await GetOrCreateClientAsync(clientService, db, brand3.Id, "Yorkshire Build Partners",      null, b3Leeds,     ClientStatus.Active, logger);
+        var sheffieldId  = await GetOrCreateClientAsync(clientService, db, brand3.Id, "Sheffield Steel Construction",  null, b3Sheffield, ClientStatus.Active, logger);
+        var hullId       = await GetOrCreateClientAsync(clientService, db, brand3.Id, "Hull Marine Engineering Ltd",   null, b3Sheffield, ClientStatus.Active, logger);
+
+        logger.LogInformation("Seeded 9 clients: 4 for Brand 1, 2 for Brand 2, 3 for Brand 3");
+
+        // ── BRAND 1 VACANCIES ─────────────────────────────────────────────────────
+        // All creates are sequential — Serializable transactions for reference number generation
+        // require this to avoid contention within the same brand.
+
+        seedCtx.CurrentTenantId = new TenantId(brand1.Id);
+
+        // 1. Scaffolders — Canary Wharf (Draft)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1London, acmeId,
+                "Scaffolders — Canary Wharf",
+                "Scaffolding crew required for Canary Wharf development project.",
+                "EC1A 1AA", null,
+                null, null, null,
+                18.50m, "GBP", EngagementType.CIS, false, null,
+                28.00m, 6, null, admin1Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Draft, null, logger);
+
+        // 2. General Labourers — Stratford Stadium (Open)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1London, acmeId,
+                "General Labourers — Stratford Stadium",
+                "General labour required for stadium construction works.",
+                "E20 2ST", null,
+                today.AddDays(14), today.AddMonths(3), null,
+                14.50m, "GBP", EngagementType.PAYE, true, 1.75m,
+                22.00m, 12, null, admin1Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Open, null, logger);
+
+        // 3. Site Manager — Thames Crossing (Open, unassigned consultant, null bill rate)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1London, thamesId,
+                "Site Manager — Thames Crossing",
+                "Experienced site manager required for river crossing civil engineering project.",
+                "SE1 7PB", null,
+                today.AddDays(14), null, null,
+                350.00m, "GBP", EngagementType.Umbrella, false, null,
+                null, 1, null, null, VacancyCreatedFrom.Manual),
+            VacancyStatus.Open, null, logger);
+
+        // 4. Plant Operators — Manchester Ring Road (Filled, started 1 month ago)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1Manchester, manchesterId,
+                "Plant Operators — Manchester Ring Road",
+                "Plant operators needed for ring road improvement scheme.",
+                "M1 1AA", null,
+                today.AddDays(-30), today.AddDays(30), null,
+                20.00m, "GBP", EngagementType.CIS, false, null,
+                32.00m, 4, null, admin1Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Filled, null, logger);
+
+        // 5. Electricians — Office Refurb (ClosedUnfilled, terminal — no StartDate needed)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1London, acmeId,
+                "Electricians — Office Refurb",
+                "Electricians required for commercial office refurbishment.",
+                "EC2V 8RF", null,
+                null, null, null,
+                28.00m, "GBP", EngagementType.Ltd, false, null,
+                45.00m, 3, null, admin1Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.ClosedUnfilled, "Client cancelled the contract before placement", logger);
+
+        // 6. Carpenters — Hospital Build (Cancelled under paused client — exercises nullable client status display)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1London, defunctId,
+                "Carpenters — Hospital Build",
+                "Skilled carpenters required for hospital construction project.",
+                "EC1A 1AA", null,
+                null, null, null,
+                22.00m, "GBP", EngagementType.PAYE, false, null,
+                35.00m, 2, null, admin1Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Cancelled, "Client placed into administration", logger);
+
+        // 7. Bricklayers — Housing Estate (Open)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1Manchester, manchesterId,
+                "Bricklayers — Housing Estate",
+                "Bricklayers required for large housing estate development.",
+                "M4 1AA", null,
+                today.AddDays(14), null, null,
+                19.00m, "GBP", EngagementType.CIS, false, null,
+                30.00m, 8, null, admin1Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Open, null, logger);
+
+        // 8. Site Cleaners — Multiple Sites (Draft, null bill rate)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
+            new CreateVacancyCommand(b1Manchester, manchesterId,
+                "Site Cleaners — Multiple Sites",
+                "Site cleaners required across multiple construction sites.",
+                "M1 1AA", null,
+                null, null, null,
+                12.50m, "GBP", EngagementType.PAYE, true, 1.51m,
+                null, 6, null, admin1Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Draft, null, logger);
+
+        // ── BRAND 2 VACANCIES ─────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand2.Id);
+
+        // 9. Warehouse Operatives (Open)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand2.Id,
+            new CreateVacancyCommand(b2Birmingham, birminghamId,
+                "Warehouse Operatives",
+                "Warehouse operatives required for logistics distribution centre.",
+                "B1 1AA", null,
+                today.AddDays(14), null, null,
+                13.00m, "GBP", EngagementType.PAYE, true, 1.57m,
+                19.50m, 10, null, admin2Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Open, null, logger);
+
+        // 10. Forklift Drivers (Filled, started 1 month ago)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand2.Id,
+            new CreateVacancyCommand(b2Birmingham, midlandsId,
+                "Forklift Drivers",
+                "Counterbalance and reach truck operators required.",
+                "B2 1AA", null,
+                today.AddDays(-30), today.AddDays(60), null,
+                15.50m, "GBP", EngagementType.PAYE, false, null,
+                24.00m, 3, null, admin2Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Filled, null, logger);
+
+        // 11. Cleaners — Weekend Shift (Cancelled, null bill rate)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand2.Id,
+            new CreateVacancyCommand(b2Birmingham, birminghamId,
+                "Cleaners — Weekend Shift",
+                "Weekend cleaning operatives for commercial premises.",
+                "B3 1AA", null,
+                null, null, null,
+                12.00m, "GBP", EngagementType.PAYE, false, null,
+                null, 4, null, admin2Id, VacancyCreatedFrom.Manual),
+            VacancyStatus.Cancelled, "Client withdrew the requirement", logger);
+
+        // ── BRAND 3 VACANCIES ─────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand3.Id);
+
+        // 12. Steel Erectors — Sheffield Mill (Open, null consultant)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand3.Id,
+            new CreateVacancyCommand(b3Sheffield, sheffieldId,
+                "Steel Erectors — Sheffield Mill",
+                "Structural steel erectors required for mill conversion project.",
+                "S1 1AA", null,
+                today.AddDays(14), null, null,
+                24.00m, "GBP", EngagementType.CIS, false, null,
+                38.00m, 5, null, null, VacancyCreatedFrom.Manual),
+            VacancyStatus.Open, null, logger);
+
+        // 13. Marine Engineers (Draft, Sheffield branch — Hull branch is retired, tests correct branch assignment)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand3.Id,
+            new CreateVacancyCommand(b3Sheffield, hullId,
+                "Marine Engineers",
+                "Specialist marine engineers for hull inspection and repair works.",
+                "S9 1AA", null,
+                null, null, null,
+                32.00m, "GBP", EngagementType.Umbrella, false, null,
+                52.00m, 2, null, null, VacancyCreatedFrom.Manual),
+            VacancyStatus.Draft, null, logger);
+
+        // 14. Demolition Crew — Yorkshire Sites (Open, Leeds branch)
+        await GetOrCreateVacancyAsync(vacancyService, db, brand3.Id,
+            new CreateVacancyCommand(b3Leeds, yorkshireId,
+                "Demolition Crew — Yorkshire Sites",
+                "Experienced demolition operatives for multiple Yorkshire sites.",
+                "LS1 1AA", null,
+                today.AddDays(14), null, null,
+                21.00m, "GBP", EngagementType.CIS, false, null,
+                33.00m, 6, null, null, VacancyCreatedFrom.Manual),
+            VacancyStatus.Open, null, logger);
+
+        logger.LogInformation(
+            "Seeded 14 vacancies: 8 for Brand 1, 3 for Brand 2, 3 for Brand 3. " +
+            "Status coverage: Draft ×3, Open ×6, Filled ×2, ClosedUnfilled ×1, Cancelled ×2. " +
+            "Engagement types: PAYE ×6, CIS ×5, Umbrella ×2, Ltd ×1.");
+    }
+
+    private static async Task<Guid> GetOrCreateClientAsync(
+        ClientService service,
+        ElectCrmDbContext db,
+        Guid brandId,
+        string legalName,
+        string? tradingName,
+        Guid branchId,
+        ClientStatus targetStatus,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        var existingId = await db.Clients
+            .IgnoreQueryFilters()
+            .Where(c => c.AgencyBrandId == brandId && c.LegalName == legalName)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (existingId.HasValue)
+        {
+            logger.LogDebug("Client '{Name}' already exists — skipping", legalName);
+            return existingId.Value;
+        }
+
+        var createResult = await service.CreateAsync(new CreateClientCommand(branchId, legalName, tradingName), ct);
+        if (createResult.IsFailure)
+            throw new InvalidOperationException($"Seed failed — could not create client '{legalName}': {createResult.Error.Message}");
+
+        var clientId = createResult.Value;
+
+        if (targetStatus != ClientStatus.Active)
+        {
+            var statusResult = await service.ChangeStatusAsync(clientId, targetStatus, ct);
+            if (statusResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — could not set status for client '{legalName}': {statusResult.Error.Message}");
+        }
+
+        logger.LogInformation("Seeded client '{Name}' (ID {Id}, Status {Status})", legalName, clientId, targetStatus);
+        return clientId;
+    }
+
+    private static async Task<Guid> GetOrCreateVacancyAsync(
+        VacancyService service,
+        ElectCrmDbContext db,
+        Guid brandId,
+        CreateVacancyCommand cmd,
+        VacancyStatus targetStatus,
+        string? statusReason,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        var existingId = await db.Vacancies
+            .IgnoreQueryFilters()
+            .Where(v => v.AgencyBrandId == brandId
+                     && v.RoleTitle == cmd.RoleTitle
+                     && v.ClientId == cmd.ClientId
+                     && v.Location.Postcode == cmd.LocationPostcode)
+            .Select(v => (Guid?)v.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (existingId.HasValue)
+        {
+            logger.LogDebug("Vacancy '{Title}' already exists — skipping", cmd.RoleTitle);
+            return existingId.Value;
+        }
+
+        var createResult = await service.CreateAsync(cmd, ct);
+        if (createResult.IsFailure)
+            throw new InvalidOperationException($"Seed failed — could not create vacancy '{cmd.RoleTitle}': {createResult.Error.Message}");
+
+        var vacancyId = createResult.Value;
+
+        switch (targetStatus)
+        {
+            case VacancyStatus.Draft:
+                break;
+
+            case VacancyStatus.Open:
+            {
+                var result = await service.ChangeStatusAsync(vacancyId,
+                    new ChangeVacancyStatusCommand(VacancyStatus.Open, null, null), ct);
+                if (result.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not open vacancy '{cmd.RoleTitle}': {result.Error.Message}");
+                break;
+            }
+
+            case VacancyStatus.Filled:
+            {
+                var openResult = await service.ChangeStatusAsync(vacancyId,
+                    new ChangeVacancyStatusCommand(VacancyStatus.Open, null, null), ct);
+                if (openResult.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not open vacancy '{cmd.RoleTitle}' for fill: {openResult.Error.Message}");
+
+                var fillResult = await service.ChangeStatusAsync(vacancyId,
+                    new ChangeVacancyStatusCommand(VacancyStatus.Filled, null, null), ct);
+                if (fillResult.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not fill vacancy '{cmd.RoleTitle}': {fillResult.Error.Message}");
+                break;
+            }
+
+            case VacancyStatus.ClosedUnfilled:
+            {
+                // Close from Draft — valid per domain, no StartDate required.
+                var result = await service.ChangeStatusAsync(vacancyId,
+                    new ChangeVacancyStatusCommand(VacancyStatus.ClosedUnfilled, statusReason, null), ct);
+                if (result.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not close vacancy '{cmd.RoleTitle}': {result.Error.Message}");
+                break;
+            }
+
+            case VacancyStatus.Cancelled:
+            {
+                // Cancel from Draft — valid per domain, no StartDate required.
+                var result = await service.ChangeStatusAsync(vacancyId,
+                    new ChangeVacancyStatusCommand(VacancyStatus.Cancelled, statusReason, null), ct);
+                if (result.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not cancel vacancy '{cmd.RoleTitle}': {result.Error.Message}");
+                break;
+            }
+        }
+
+        logger.LogInformation("Seeded vacancy '{Title}' (Status {Status})", cmd.RoleTitle, targetStatus);
+        return vacancyId;
+    }
+
+    // Simulates tenant context for seeder code that runs outside of an HTTP request.
+    // The HTTP-based TenantContextAccessor returns TenantId.Empty when HttpContext is null;
+    // this class lets us set the tenant explicitly before each service call.
+    private sealed class SeedTenantContext : ITenantContext
+    {
+        public TenantId CurrentTenantId { get; set; } = TenantId.Empty;
     }
 }
