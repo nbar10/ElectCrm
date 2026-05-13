@@ -14,7 +14,10 @@ using ElectCrm.Domain.Contacts;
 using ElectCrm.Domain.Persons;
 using ElectCrm.Domain.Users;
 using ElectCrm.Domain.Vacancies;
+using ElectCrm.Application.Features.Placements;
+using ElectCrm.Domain.Placements;
 using ElectCrm.Infrastructure.Features.Clients;
+using ElectCrm.Infrastructure.Features.Placements;
 using ElectCrm.Infrastructure.Features.Vacancies;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Infrastructure.Persistence;
@@ -73,6 +76,7 @@ public static class DatabaseSeeder
         await SeedAdminSliceTestDataAsync(brand1, brand2, dbContext, logger);
         await SeedMidlandsTestUserAsync(dbContext, userManager, config, logger);
         await SeedVacancySliceTestDataAsync(sp, logger);
+        await SeedPlacementSliceTestDataAsync(sp, hashing, logger);
 
         logger.LogInformation("Development seed complete");
     }
@@ -687,16 +691,16 @@ public static class DatabaseSeeder
 
         seedCtx.CurrentTenantId = new TenantId(brand1.Id);
 
-        // 1. Scaffolders — Canary Wharf (Draft)
+        // 1. Scaffolders — Canary Wharf (Open)
         await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
             new CreateVacancyCommand(b1London, acmeId,
                 "Scaffolders — Canary Wharf",
                 "Scaffolding crew required for Canary Wharf development project.",
                 "EC1A 1AA", null,
-                null, null, null,
+                today.AddDays(14), null, null,
                 18.50m, "GBP", EngagementType.CIS, false, null,
                 28.00m, 6, null, admin1Id, VacancyCreatedFrom.Manual),
-            VacancyStatus.Draft, null, logger);
+            VacancyStatus.Open, null, logger);
 
         // 2. General Labourers — Stratford Stadium (Open)
         await GetOrCreateVacancyAsync(vacancyService, db, brand1.Id,
@@ -833,7 +837,7 @@ public static class DatabaseSeeder
                 "Marine Engineers",
                 "Specialist marine engineers for hull inspection and repair works.",
                 "S9 1AA", null,
-                null, null, null,
+                today.AddDays(14), null, null,
                 32.00m, "GBP", EngagementType.Umbrella, false, null,
                 52.00m, 2, null, null, VacancyCreatedFrom.Manual),
             VacancyStatus.Draft, null, logger);
@@ -977,6 +981,839 @@ public static class DatabaseSeeder
 
         logger.LogInformation("Seeded vacancy '{Title}' (Status {Status})", cmd.RoleTitle, targetStatus);
         return vacancyId;
+    }
+
+    private static async Task SeedPlacementSliceTestDataAsync(
+        IServiceProvider sp,
+        IPersonHashingService hashing,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        var db          = sp.GetRequiredService<ElectCrmDbContext>();
+        var dispatcher  = sp.GetRequiredService<IDomainEventDispatcher>();
+        var lf          = sp.GetRequiredService<ILoggerFactory>();
+        var userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var brand1 = await db.AgencyBrands.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand1Chn, ct);
+        var brand2 = await db.AgencyBrands.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand2Chn, ct);
+        var brand3 = await db.AgencyBrands.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand3Chn, ct);
+
+        if (brand1 is null || brand2 is null || brand3 is null)
+        {
+            logger.LogWarning("Placement slice seed skipped — required brands not found. Ensure SeedAdminSliceTestDataAsync ran first.");
+            return;
+        }
+
+        var adminAppUser  = await userManager.FindByEmailAsync(AdminEmail);
+        var admin2AppUser = await userManager.FindByEmailAsync(Admin2Email);
+        Guid? admin1Id = adminAppUser?.DomainUserId;
+        Guid? admin2Id = admin2AppUser?.DomainUserId;
+
+        // Idempotency sentinel: check if John Smith's Brand 1 candidate has any placement
+        // for "Scaffolders — Canary Wharf". If so, the entire placement seed has already run.
+        var johnSmithBrand1CandidateId = await db.Candidates
+            .IgnoreQueryFilters()
+            .Where(c => c.AgencyBrandId == brand1.Id)
+            .Join(db.Persons,
+                c => c.PersonId,
+                p => p.Id,
+                (c, p) => new { c.Id, p.DisplayName, p.DateOfBirth })
+            .Where(x => x.DisplayName == "John Smith" && x.DateOfBirth == new DateOnly(1985, 3, 14))
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (johnSmithBrand1CandidateId.HasValue)
+        {
+            var scaffoldersVacancyIdCheck = await db.Vacancies
+                .IgnoreQueryFilters()
+                .Where(v => v.AgencyBrandId == brand1.Id && v.RoleTitle == "Scaffolders — Canary Wharf")
+                .Select(v => (Guid?)v.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (scaffoldersVacancyIdCheck.HasValue)
+            {
+                var sentinelExists = await db.Placements
+                    .IgnoreQueryFilters()
+                    .AnyAsync(p => p.CandidateId == johnSmithBrand1CandidateId.Value
+                                && p.VacancyId == scaffoldersVacancyIdCheck.Value, ct);
+
+                if (sentinelExists)
+                {
+                    logger.LogDebug("Placement slice test data already seeded — skipping");
+                    return;
+                }
+            }
+        }
+
+        // ── SEED NEW PERSONS ───────────────────────────────────────────────────────
+
+        var personAlreadySeeded = await db.Persons
+            .AnyAsync(p => p.DisplayName == "Jane Brown" && p.DateOfBirth == new DateOnly(1991, 5, 12), ct);
+
+        if (!personAlreadySeeded)
+        {
+            var placementPersonSeeds = PlacementPersonSeeds();
+
+            foreach (var (displayName, dob, phoneRaw, niRaw, passportRaw) in placementPersonSeeds)
+            {
+                string? phoneHash = null, phoneEncrypted = null;
+                if (phoneRaw is not null)
+                {
+                    var normalised = phoneRaw.Replace(" ", string.Empty);
+                    phoneHash      = hashing.HashValue(normalised);
+                    phoneEncrypted = hashing.EncryptValue(normalised);
+                }
+
+                string? niHash = null, niEncrypted = null;
+                if (niRaw is not null)
+                {
+                    var niResult = NationalInsuranceNumber.TryCreate(niRaw);
+                    if (niResult.IsFailure)
+                        throw new InvalidOperationException($"Seed failed — invalid NI number for '{displayName}': {niResult.Error.Message}");
+
+                    niHash      = hashing.HashValue(niResult.Value.Value);
+                    niEncrypted = hashing.EncryptValue(niResult.Value.Value);
+                }
+
+                string? passportHash = null, passportEncrypted = null;
+                if (passportRaw is not null)
+                {
+                    passportHash      = hashing.HashValue(passportRaw);
+                    passportEncrypted = hashing.EncryptValue(passportRaw);
+                }
+
+                var fullNameNormalised = PersonNameNormaliser.Normalise(displayName);
+
+                var result = Person.Create(
+                    displayName, fullNameNormalised, dob,
+                    phoneHash, phoneEncrypted,
+                    niHash, niEncrypted,
+                    passportHash, passportEncrypted);
+
+                if (result.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not create person '{displayName}': {result.Error.Message}");
+
+                db.Persons.Add(result.Value);
+                result.Value.ClearDomainEvents();
+            }
+
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("Seeded {Count} new persons for placement slice", placementPersonSeeds.Count);
+        }
+        else
+        {
+            logger.LogDebug("Placement slice persons already seeded — skipping person creation");
+        }
+
+        // ── RESOLVE PERSONS ────────────────────────────────────────────────────────
+
+        var allPersons = await db.Persons.Where(p => !p.IsDeleted).ToListAsync(ct);
+
+        Domain.Persons.Person FindPerson(string name, DateOnly dob) =>
+            allPersons.FirstOrDefault(p => p.DisplayName == name && p.DateOfBirth == dob)
+            ?? throw new InvalidOperationException($"Seed failed — Person '{name}' ({dob:yyyy-MM-dd}) not found.");
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // ── SEED NEW CANDIDATES ────────────────────────────────────────────────────
+
+        void AddCandidateIfAbsent(AgencyBrand brand, Domain.Persons.Person person, CandidateStatus status, DateOnly regDate, string trade, string source)
+        {
+            // Check is done after SaveChanges per batch — tracked via EF local cache check.
+            var result = Candidate.Create(
+                new TenantId(brand.Id),
+                person.Id,
+                regDate,
+                status,
+                ownerConsultantId: null,
+                primaryTrade: trade,
+                source: source,
+                sourceLegacyId: null,
+                notes: null);
+
+            if (result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — could not create candidate '{person.DisplayName}' for brand '{brand.TradingName}': {result.Error.Message}");
+
+            db.Candidates.Add(result.Value);
+            result.Value.ClearDomainEvents();
+        }
+
+        // Brand 1 new candidates
+        var brand1NewCandidateSeeds = new[]
+        {
+            (Person: FindPerson("Jane Brown",       new DateOnly(1991,  5, 12)), Trade: "Labourer",       Source: "Indeed",     Status: CandidateStatus.Active, RegDate: today.AddDays(-100)),
+            (Person: FindPerson("Robert Davis",     new DateOnly(1983,  8, 22)), Trade: "Plant Operator", Source: "Walk-in",    Status: CandidateStatus.Active, RegDate: today.AddDays(-80)),
+            (Person: FindPerson("Sarah Wilson",     new DateOnly(1979,  3,  7)), Trade: "Plant Operator", Source: "Referral",   Status: CandidateStatus.Active, RegDate: today.AddDays(-200)),
+            (Person: FindPerson("Michael Taylor",   new DateOnly(1986, 11, 15)), Trade: "Plant Operator", Source: "Find a Job", Status: CandidateStatus.Active, RegDate: today.AddDays(-150)),
+            (Person: FindPerson("Emma Johnson",     new DateOnly(1994,  2, 28)), Trade: "Site Manager",   Source: "LinkedIn",   Status: CandidateStatus.Active, RegDate: today.AddDays(-90)),
+            (Person: FindPerson("Daniel Martinez",  new DateOnly(1988,  7,  4)), Trade: "Bricklayer",     Source: "Walk-in",    Status: CandidateStatus.Active, RegDate: today.AddDays(-70)),
+            (Person: FindPerson("Lisa Anderson",    new DateOnly(1992,  9, 19)), Trade: "Bricklayer",     Source: "Indeed",     Status: CandidateStatus.Active, RegDate: today.AddDays(-60)),
+            (Person: FindPerson("Alexander Reid",   new DateOnly(1987,  7, 30)), Trade: "Marine Engineer", Source: "Referral",  Status: CandidateStatus.Active, RegDate: today.AddDays(-110)),
+        };
+
+        // Brand 2 new candidates
+        var brand2NewCandidateSeeds = new[]
+        {
+            (Person: FindPerson("Christopher Lee",  new DateOnly(1980, 12, 30)), Trade: "Warehouse Op",   Source: "Indeed",     Status: CandidateStatus.Active, RegDate: today.AddDays(-120)),
+            (Person: FindPerson("Patricia Garcia",  new DateOnly(1985,  6, 17)), Trade: "Warehouse Op",   Source: "Referral",   Status: CandidateStatus.Active, RegDate: today.AddDays(-95)),
+            (Person: FindPerson("James Rodriguez",  new DateOnly(1977,  4,  2)), Trade: "Forklift Driver", Source: "Walk-in",   Status: CandidateStatus.Active, RegDate: today.AddDays(-250)),
+            (Person: FindPerson("Mary Hernandez",   new DateOnly(1990, 10, 25)), Trade: "Warehouse Op",   Source: "Find a Job", Status: CandidateStatus.Active, RegDate: today.AddDays(-50)),
+        };
+
+        // Brand 3 new candidates
+        var brand3NewCandidateSeeds = new[]
+        {
+            (Person: FindPerson("William Thompson", new DateOnly(1982,  1, 14)), Trade: "Steel Erector",  Source: "Referral",  Status: CandidateStatus.Active, RegDate: today.AddDays(-140)),
+            (Person: FindPerson("Karen White",      new DateOnly(1975,  8,  9)), Trade: "Steel Erector",  Source: "Walk-in",   Status: CandidateStatus.Active, RegDate: today.AddDays(-130)),
+            (Person: FindPerson("Steven Clark",     new DateOnly(1989,  3, 21)), Trade: "Steel Erector",  Source: "LinkedIn",  Status: CandidateStatus.Active, RegDate: today.AddDays(-85)),
+            (Person: FindPerson("Nancy Lewis",      new DateOnly(1993, 11,  6)), Trade: "Demolition",     Source: "Indeed",    Status: CandidateStatus.Active, RegDate: today.AddDays(-165)),
+            (Person: FindPerson("Alexander Reid",   new DateOnly(1987,  7, 30)), Trade: "Marine Engineer", Source: "Referral",  Status: CandidateStatus.Active, RegDate: today.AddDays(-105)),
+        };
+
+        // Add candidates only if absent (check by PersonId + AgencyBrandId).
+        var existingBrand1CandidatePersonIds = await db.Candidates
+            .IgnoreQueryFilters()
+            .Where(c => c.AgencyBrandId == brand1.Id)
+            .Select(c => c.PersonId)
+            .ToListAsync(ct);
+
+        var existingBrand2CandidatePersonIds = await db.Candidates
+            .IgnoreQueryFilters()
+            .Where(c => c.AgencyBrandId == brand2.Id)
+            .Select(c => c.PersonId)
+            .ToListAsync(ct);
+
+        var existingBrand3CandidatePersonIds = await db.Candidates
+            .IgnoreQueryFilters()
+            .Where(c => c.AgencyBrandId == brand3.Id)
+            .Select(c => c.PersonId)
+            .ToListAsync(ct);
+
+        var brand1CandidatesAdded = 0;
+        foreach (var s in brand1NewCandidateSeeds)
+        {
+            if (existingBrand1CandidatePersonIds.Contains(s.Person.Id))
+                continue;
+
+            AddCandidateIfAbsent(brand1, s.Person, s.Status, s.RegDate, s.Trade, s.Source);
+            brand1CandidatesAdded++;
+        }
+
+        var brand2CandidatesAdded = 0;
+        foreach (var s in brand2NewCandidateSeeds)
+        {
+            if (existingBrand2CandidatePersonIds.Contains(s.Person.Id))
+                continue;
+
+            AddCandidateIfAbsent(brand2, s.Person, s.Status, s.RegDate, s.Trade, s.Source);
+            brand2CandidatesAdded++;
+        }
+
+        var brand3CandidatesAdded = 0;
+        foreach (var s in brand3NewCandidateSeeds)
+        {
+            if (existingBrand3CandidatePersonIds.Contains(s.Person.Id))
+                continue;
+
+            AddCandidateIfAbsent(brand3, s.Person, s.Status, s.RegDate, s.Trade, s.Source);
+            brand3CandidatesAdded++;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation(
+            "Placement slice candidates seeded: {B1} for Brand 1, {B2} for Brand 2, {B3} for Brand 3. " +
+            "Brand 3 now has candidates for the first time. Alexander Reid is cross-brand (Brand 1 + Brand 3).",
+            brand1CandidatesAdded, brand2CandidatesAdded, brand3CandidatesAdded);
+
+        // ── WIRE SERVICES ──────────────────────────────────────────────────────────
+
+        var seedCtx          = new SeedTenantContext();
+        var vacancyService   = new VacancyService(db, seedCtx, dispatcher, lf.CreateLogger<VacancyService>());
+        var placementService = new PlacementService(db, seedCtx, dispatcher, lf.CreateLogger<PlacementService>(), vacancyService);
+
+        // ── PRE-TRANSITION DRAFT VACANCIES TO OPEN ─────────────────────────────────
+
+        // "Scaffolders — Canary Wharf" — open if still Draft (handles DBs seeded before this fix)
+        var scaffoldersVacancy = await db.Vacancies
+            .IgnoreQueryFilters()
+            .FirstAsync(v => v.AgencyBrandId == brand1.Id && v.RoleTitle == "Scaffolders — Canary Wharf", ct);
+
+        if (scaffoldersVacancy.Status == VacancyStatus.Draft)
+        {
+            seedCtx.CurrentTenantId = new TenantId(brand1.Id);
+
+            // Ensure a start date is set — required before a vacancy can be opened.
+            // The original seed created this vacancy without one; set it now.
+            if (!scaffoldersVacancy.StartDate.HasValue)
+            {
+                var updateResult = await vacancyService.UpdateDetailsAsync(
+                    scaffoldersVacancy.Id,
+                    new UpdateVacancyDetailsCommand(
+                        scaffoldersVacancy.RoleTitle,
+                        scaffoldersVacancy.Description,
+                        scaffoldersVacancy.Location.Postcode,
+                        scaffoldersVacancy.Location.Description,
+                        today.AddDays(14),
+                        scaffoldersVacancy.ExpectedEndDate,
+                        scaffoldersVacancy.ShiftPattern,
+                        scaffoldersVacancy.HeadcountRequired,
+                        scaffoldersVacancy.RequiredCards),
+                    ct);
+                if (updateResult.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not set start date on Scaffolders vacancy: {updateResult.Error.Message}");
+            }
+
+            var openResult = await vacancyService.ChangeStatusAsync(
+                scaffoldersVacancy.Id,
+                new ChangeVacancyStatusCommand(VacancyStatus.Open, null, null),
+                ct);
+            if (openResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — could not open Scaffolders vacancy: {openResult.Error.Message}");
+
+            logger.LogInformation("Pre-transitioned 'Scaffolders — Canary Wharf' from Draft to Open");
+        }
+
+        // "Marine Engineers" — open if still Draft (required for P17)
+        var marineVacancy = await db.Vacancies
+            .IgnoreQueryFilters()
+            .FirstAsync(v => v.AgencyBrandId == brand3.Id && v.RoleTitle == "Marine Engineers", ct);
+
+        if (marineVacancy.Status == VacancyStatus.Draft)
+        {
+            seedCtx.CurrentTenantId = new TenantId(brand3.Id);
+
+            if (!marineVacancy.StartDate.HasValue)
+            {
+                var updateResult = await vacancyService.UpdateDetailsAsync(
+                    marineVacancy.Id,
+                    new UpdateVacancyDetailsCommand(
+                        marineVacancy.RoleTitle,
+                        marineVacancy.Description,
+                        marineVacancy.Location.Postcode,
+                        marineVacancy.Location.Description,
+                        today.AddDays(14),
+                        marineVacancy.ExpectedEndDate,
+                        marineVacancy.ShiftPattern,
+                        marineVacancy.HeadcountRequired,
+                        marineVacancy.RequiredCards),
+                    ct);
+                if (updateResult.IsFailure)
+                    throw new InvalidOperationException($"Seed failed — could not set start date on Marine Engineers vacancy: {updateResult.Error.Message}");
+            }
+
+            var openResult = await vacancyService.ChangeStatusAsync(
+                marineVacancy.Id,
+                new ChangeVacancyStatusCommand(VacancyStatus.Open, null, null),
+                ct);
+            if (openResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — could not open Marine Engineers vacancy: {openResult.Error.Message}");
+
+            logger.LogInformation("Pre-transitioned 'Marine Engineers' from Draft to Open");
+        }
+
+        // ── RESOLVE VACANCY IDs ────────────────────────────────────────────────────
+
+        var vacScaffolders     = scaffoldersVacancy.Id;
+        var vacStratford       = await GetVacancyIdAsync(db, brand1.Id, "General Labourers — Stratford Stadium", ct);
+        var vacThamesCrossing  = await GetVacancyIdAsync(db, brand1.Id, "Site Manager — Thames Crossing", ct);
+        var vacManchesterPlant = await GetVacancyIdAsync(db, brand1.Id, "Plant Operators — Manchester Ring Road", ct);
+        var vacBricklayers     = await GetVacancyIdAsync(db, brand1.Id, "Bricklayers — Housing Estate", ct);
+
+        var vacWarehouse       = await GetVacancyIdAsync(db, brand2.Id, "Warehouse Operatives", ct);
+        var vacForklift        = await GetVacancyIdAsync(db, brand2.Id, "Forklift Drivers", ct);
+
+        var vacSteelErectors   = await GetVacancyIdAsync(db, brand3.Id, "Steel Erectors — Sheffield Mill", ct);
+        var vacDemolition      = await GetVacancyIdAsync(db, brand3.Id, "Demolition Crew — Yorkshire Sites", ct);
+        var vacMarine          = marineVacancy.Id;
+
+        // ── RESOLVE CANDIDATE IDs ──────────────────────────────────────────────────
+
+        // Brand 1 candidates
+        var candJohnSmithB1        = await GetCandidateIdAsync(db, brand1.Id, FindPerson("John Smith",      new DateOnly(1985,  3, 14)).Id, "John Smith (Brand 1)",      ct);
+        var candJaneBrownB1        = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Jane Brown",      new DateOnly(1991,  5, 12)).Id, "Jane Brown",                ct);
+        var candRobertDavisB1      = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Robert Davis",    new DateOnly(1983,  8, 22)).Id, "Robert Davis",              ct);
+        var candSarahWilsonB1      = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Sarah Wilson",    new DateOnly(1979,  3,  7)).Id, "Sarah Wilson",              ct);
+        var candMichaelTaylorB1    = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Michael Taylor",  new DateOnly(1986, 11, 15)).Id, "Michael Taylor",            ct);
+        var candEmmaJohnsonB1      = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Emma Johnson",    new DateOnly(1994,  2, 28)).Id, "Emma Johnson",              ct);
+        var candDanielMartinezB1   = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Daniel Martinez", new DateOnly(1988,  7,  4)).Id, "Daniel Martinez",           ct);
+        var candLisaAndersonB1     = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Lisa Anderson",   new DateOnly(1992,  9, 19)).Id, "Lisa Anderson",             ct);
+        var candAlexanderReidB1    = await GetCandidateIdAsync(db, brand1.Id, FindPerson("Alexander Reid",  new DateOnly(1987,  7, 30)).Id, "Alexander Reid (Brand 1)",  ct);
+
+        // Brand 2 candidates
+        var candChristopherLeeB2   = await GetCandidateIdAsync(db, brand2.Id, FindPerson("Christopher Lee", new DateOnly(1980, 12, 30)).Id, "Christopher Lee",           ct);
+        var candPatriciaGarciaB2   = await GetCandidateIdAsync(db, brand2.Id, FindPerson("Patricia Garcia",  new DateOnly(1985,  6, 17)).Id, "Patricia Garcia",           ct);
+        var candJamesRodriguezB2   = await GetCandidateIdAsync(db, brand2.Id, FindPerson("James Rodriguez",  new DateOnly(1977,  4,  2)).Id, "James Rodriguez",           ct);
+        var candMaryHernandezB2    = await GetCandidateIdAsync(db, brand2.Id, FindPerson("Mary Hernandez",   new DateOnly(1990, 10, 25)).Id, "Mary Hernandez",            ct);
+
+        // Brand 3 candidates
+        var candWilliamThompsonB3  = await GetCandidateIdAsync(db, brand3.Id, FindPerson("William Thompson", new DateOnly(1982,  1, 14)).Id, "William Thompson",          ct);
+        var candKarenWhiteB3       = await GetCandidateIdAsync(db, brand3.Id, FindPerson("Karen White",       new DateOnly(1975,  8,  9)).Id, "Karen White",               ct);
+        var candStevenClarkB3      = await GetCandidateIdAsync(db, brand3.Id, FindPerson("Steven Clark",      new DateOnly(1989,  3, 21)).Id, "Steven Clark",              ct);
+        var candNancyLewisB3       = await GetCandidateIdAsync(db, brand3.Id, FindPerson("Nancy Lewis",       new DateOnly(1993, 11,  6)).Id, "Nancy Lewis",               ct);
+        var candAlexanderReidB3    = await GetCandidateIdAsync(db, brand3.Id, FindPerson("Alexander Reid",    new DateOnly(1987,  7, 30)).Id, "Alexander Reid (Brand 3)",  ct);
+
+        // ── BRAND 1 PLACEMENTS ─────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand1.Id);
+
+        // P1 — John Smith → Scaffolders — Canary Wharf — STATUS: Offered
+        if (!await PlacementExistsAsync(db, candJohnSmithB1, vacScaffolders, ct))
+        {
+            var p1Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacScaffolders, candJohnSmithB1, admin1Id,
+                    today.AddDays(14), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p1Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P1 (John Smith → Scaffolders): {p1Result.Error.Message}");
+        }
+
+        // P2 — Jane Brown → General Labourers — Stratford Stadium — STATUS: Accepted
+        if (!await PlacementExistsAsync(db, candJaneBrownB1, vacStratford, ct))
+        {
+            var p2Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacStratford, candJaneBrownB1, admin1Id,
+                    today.AddDays(7), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p2Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P2 (Jane Brown → Stratford): {p2Result.Error.Message}");
+
+            var p2AcceptResult = await placementService.AcceptAsync(p2Result.Value, ct);
+            if (p2AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P2 accepting (Jane Brown → Stratford): {p2AcceptResult.Error.Message}");
+        }
+
+        // P3 — Robert Davis → General Labourers — Stratford Stadium — STATUS: Active
+        if (!await PlacementExistsAsync(db, candRobertDavisB1, vacStratford, ct))
+        {
+            var p3Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacStratford, candRobertDavisB1, admin1Id,
+                    today.AddDays(-3), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p3Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P3 (Robert Davis → Stratford): {p3Result.Error.Message}");
+
+            var p3AcceptResult = await placementService.AcceptAsync(p3Result.Value, ct);
+            if (p3AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P3 accepting (Robert Davis → Stratford): {p3AcceptResult.Error.Message}");
+
+            var p3StartResult = await placementService.StartAsync(p3Result.Value, today.AddDays(-3), ct);
+            if (p3StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P3 starting (Robert Davis → Stratford): {p3StartResult.Error.Message}");
+        }
+
+        // P4 — Sarah Wilson → Plant Operators — Manchester Ring Road — STATUS: Completed
+        if (!await PlacementExistsAsync(db, candSarahWilsonB1, vacManchesterPlant, ct))
+        {
+            var p4Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacManchesterPlant, candSarahWilsonB1, admin1Id,
+                    today.AddDays(-42), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p4Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P4 (Sarah Wilson → Manchester Plant): {p4Result.Error.Message}");
+
+            var p4AcceptResult = await placementService.AcceptAsync(p4Result.Value, ct);
+            if (p4AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P4 accepting (Sarah Wilson → Manchester Plant): {p4AcceptResult.Error.Message}");
+
+            var p4StartResult = await placementService.StartAsync(p4Result.Value, today.AddDays(-42), ct);
+            if (p4StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P4 starting (Sarah Wilson → Manchester Plant): {p4StartResult.Error.Message}");
+
+            var p4CompleteResult = await placementService.CompleteAsync(p4Result.Value, today, ct);
+            if (p4CompleteResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P4 completing (Sarah Wilson → Manchester Plant): {p4CompleteResult.Error.Message}");
+        }
+
+        // P5 — Michael Taylor → Plant Operators — Manchester Ring Road — STATUS: TerminatedEarly
+        if (!await PlacementExistsAsync(db, candMichaelTaylorB1, vacManchesterPlant, ct))
+        {
+            var p5Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacManchesterPlant, candMichaelTaylorB1, admin1Id,
+                    today.AddDays(-28), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p5Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P5 (Michael Taylor → Manchester Plant): {p5Result.Error.Message}");
+
+            var p5AcceptResult = await placementService.AcceptAsync(p5Result.Value, ct);
+            if (p5AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P5 accepting (Michael Taylor → Manchester Plant): {p5AcceptResult.Error.Message}");
+
+            var p5StartResult = await placementService.StartAsync(p5Result.Value, today.AddDays(-28), ct);
+            if (p5StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P5 starting (Michael Taylor → Manchester Plant): {p5StartResult.Error.Message}");
+
+            var p5TermResult = await placementService.TerminateEarlyAsync(
+                p5Result.Value, today.AddDays(-7),
+                "Worker resigned to accept permanent position elsewhere",
+                ct);
+            if (p5TermResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P5 terminating (Michael Taylor → Manchester Plant): {p5TermResult.Error.Message}");
+        }
+
+        // P6 — Emma Johnson → Site Manager — Thames Crossing — STATUS: Declined
+        if (!await PlacementExistsAsync(db, candEmmaJohnsonB1, vacThamesCrossing, ct))
+        {
+            var p6Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacThamesCrossing, candEmmaJohnsonB1, null,
+                    today.AddDays(-30), null, 37.5m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p6Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P6 (Emma Johnson → Thames Crossing): {p6Result.Error.Message}");
+
+            var p6DeclineResult = await placementService.DeclineAsync(
+                p6Result.Value, "Candidate accepted competing offer", ct);
+            if (p6DeclineResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P6 declining (Emma Johnson → Thames Crossing): {p6DeclineResult.Error.Message}");
+        }
+
+        // P7 — Daniel Martinez → Bricklayers — Housing Estate — STATUS: Cancelled
+        if (!await PlacementExistsAsync(db, candDanielMartinezB1, vacBricklayers, ct))
+        {
+            var p7Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacBricklayers, candDanielMartinezB1, admin1Id,
+                    today.AddDays(-14), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p7Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P7 (Daniel Martinez → Bricklayers): {p7Result.Error.Message}");
+
+            var p7AcceptResult = await placementService.AcceptAsync(p7Result.Value, ct);
+            if (p7AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P7 accepting (Daniel Martinez → Bricklayers): {p7AcceptResult.Error.Message}");
+
+            var p7CancelResult = await placementService.CancelAsync(
+                p7Result.Value, "Client withdrew the requirement before start date", ct);
+            if (p7CancelResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P7 cancelling (Daniel Martinez → Bricklayers): {p7CancelResult.Error.Message}");
+        }
+
+        // P8 — Lisa Anderson → Bricklayers — Housing Estate — STATUS: Accepted (BillRate cleared)
+        if (!await PlacementExistsAsync(db, candLisaAndersonB1, vacBricklayers, ct))
+        {
+            var p8Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacBricklayers, candLisaAndersonB1, admin1Id,
+                    today.AddDays(7), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p8Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P8 (Lisa Anderson → Bricklayers): {p8Result.Error.Message}");
+
+            var p8AcceptResult = await placementService.AcceptAsync(p8Result.Value, ct);
+            if (p8AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P8 accepting (Lisa Anderson → Bricklayers): {p8AcceptResult.Error.Message}");
+
+            // Clear BillRate: Bricklayers vacancy has BillRate = 30.00 which snapshotted on create.
+            // UpdateTermsAsync with BillRate = null removes the current bill rate (snapshot is preserved).
+            var p8UpdateResult = await placementService.UpdateTermsAsync(
+                p8Result.Value,
+                new UpdatePlacementTermsCommand(
+                    PayRateAmount:       19.00m,
+                    PayRateCurrency:     "GBP",
+                    EngagementType:      EngagementType.CIS,
+                    HolidayPayInclusive: false,
+                    HolidayPayRate:      null,
+                    BillRate:            null,
+                    ProposedStartDate:   today.AddDays(7),
+                    ExpectedEndDate:     null,
+                    HoursPerWeek:        40m),
+                ct);
+            if (p8UpdateResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P8 clearing BillRate (Lisa Anderson → Bricklayers): {p8UpdateResult.Error.Message}");
+
+            logger.LogInformation("P8 (Lisa Anderson → Bricklayers): BillRate cleared via UpdateTermsAsync");
+        }
+
+        // ── BRAND 2 PLACEMENTS ─────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand2.Id);
+
+        // P9 — Christopher Lee → Warehouse Operatives — STATUS: Active
+        if (!await PlacementExistsAsync(db, candChristopherLeeB2, vacWarehouse, ct))
+        {
+            var p9Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacWarehouse, candChristopherLeeB2, admin2Id,
+                    today.AddDays(-30), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p9Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P9 (Christopher Lee → Warehouse): {p9Result.Error.Message}");
+
+            var p9AcceptResult = await placementService.AcceptAsync(p9Result.Value, ct);
+            if (p9AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P9 accepting (Christopher Lee → Warehouse): {p9AcceptResult.Error.Message}");
+
+            var p9StartResult = await placementService.StartAsync(p9Result.Value, today.AddDays(-30), ct);
+            if (p9StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P9 starting (Christopher Lee → Warehouse): {p9StartResult.Error.Message}");
+        }
+
+        // P10 — Patricia Garcia → Warehouse Operatives — STATUS: Active
+        if (!await PlacementExistsAsync(db, candPatriciaGarciaB2, vacWarehouse, ct))
+        {
+            var p10Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacWarehouse, candPatriciaGarciaB2, admin2Id,
+                    today.AddDays(-21), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p10Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P10 (Patricia Garcia → Warehouse): {p10Result.Error.Message}");
+
+            var p10AcceptResult = await placementService.AcceptAsync(p10Result.Value, ct);
+            if (p10AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P10 accepting (Patricia Garcia → Warehouse): {p10AcceptResult.Error.Message}");
+
+            var p10StartResult = await placementService.StartAsync(p10Result.Value, today.AddDays(-21), ct);
+            if (p10StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P10 starting (Patricia Garcia → Warehouse): {p10StartResult.Error.Message}");
+        }
+
+        // P11 — James Rodriguez → Forklift Drivers — STATUS: Completed
+        if (!await PlacementExistsAsync(db, candJamesRodriguezB2, vacForklift, ct))
+        {
+            var p11Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacForklift, candJamesRodriguezB2, admin2Id,
+                    today.AddDays(-56), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p11Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P11 (James Rodriguez → Forklift): {p11Result.Error.Message}");
+
+            var p11AcceptResult = await placementService.AcceptAsync(p11Result.Value, ct);
+            if (p11AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P11 accepting (James Rodriguez → Forklift): {p11AcceptResult.Error.Message}");
+
+            var p11StartResult = await placementService.StartAsync(p11Result.Value, today.AddDays(-56), ct);
+            if (p11StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P11 starting (James Rodriguez → Forklift): {p11StartResult.Error.Message}");
+
+            var p11CompleteResult = await placementService.CompleteAsync(p11Result.Value, today.AddDays(-14), ct);
+            if (p11CompleteResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P11 completing (James Rodriguez → Forklift): {p11CompleteResult.Error.Message}");
+        }
+
+        // P12 — Mary Hernandez → Forklift Drivers — STATUS: Offered
+        if (!await PlacementExistsAsync(db, candMaryHernandezB2, vacForklift, ct))
+        {
+            var p12Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacForklift, candMaryHernandezB2, admin2Id,
+                    today.AddDays(7), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p12Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P12 (Mary Hernandez → Forklift): {p12Result.Error.Message}");
+        }
+
+        // ── BRAND 3 PLACEMENTS ─────────────────────────────────────────────────────
+
+        seedCtx.CurrentTenantId = new TenantId(brand3.Id);
+
+        // P13 — William Thompson → Steel Erectors — Sheffield Mill — STATUS: Active
+        if (!await PlacementExistsAsync(db, candWilliamThompsonB3, vacSteelErectors, ct))
+        {
+            var p13Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacSteelErectors, candWilliamThompsonB3, null,
+                    today.AddDays(-14), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p13Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P13 (William Thompson → Steel Erectors): {p13Result.Error.Message}");
+
+            var p13AcceptResult = await placementService.AcceptAsync(p13Result.Value, ct);
+            if (p13AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P13 accepting (William Thompson → Steel Erectors): {p13AcceptResult.Error.Message}");
+
+            var p13StartResult = await placementService.StartAsync(p13Result.Value, today.AddDays(-14), ct);
+            if (p13StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P13 starting (William Thompson → Steel Erectors): {p13StartResult.Error.Message}");
+        }
+
+        // P14 — Karen White → Steel Erectors — Sheffield Mill — STATUS: Active
+        if (!await PlacementExistsAsync(db, candKarenWhiteB3, vacSteelErectors, ct))
+        {
+            var p14Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacSteelErectors, candKarenWhiteB3, null,
+                    today.AddDays(-10), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p14Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P14 (Karen White → Steel Erectors): {p14Result.Error.Message}");
+
+            var p14AcceptResult = await placementService.AcceptAsync(p14Result.Value, ct);
+            if (p14AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P14 accepting (Karen White → Steel Erectors): {p14AcceptResult.Error.Message}");
+
+            var p14StartResult = await placementService.StartAsync(p14Result.Value, today.AddDays(-10), ct);
+            if (p14StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P14 starting (Karen White → Steel Erectors): {p14StartResult.Error.Message}");
+        }
+
+        // P15 — Steven Clark → Steel Erectors — Sheffield Mill — STATUS: Offered
+        if (!await PlacementExistsAsync(db, candStevenClarkB3, vacSteelErectors, ct))
+        {
+            var p15Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacSteelErectors, candStevenClarkB3, null,
+                    today.AddDays(7), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p15Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P15 (Steven Clark → Steel Erectors): {p15Result.Error.Message}");
+        }
+
+        // P16 — Nancy Lewis → Demolition Crew — Yorkshire Sites — STATUS: Active
+        if (!await PlacementExistsAsync(db, candNancyLewisB3, vacDemolition, ct))
+        {
+            var p16Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacDemolition, candNancyLewisB3, null,
+                    today.AddDays(-30), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p16Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P16 (Nancy Lewis → Demolition): {p16Result.Error.Message}");
+
+            var p16AcceptResult = await placementService.AcceptAsync(p16Result.Value, ct);
+            if (p16AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P16 accepting (Nancy Lewis → Demolition): {p16AcceptResult.Error.Message}");
+
+            var p16StartResult = await placementService.StartAsync(p16Result.Value, today.AddDays(-30), ct);
+            if (p16StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P16 starting (Nancy Lewis → Demolition): {p16StartResult.Error.Message}");
+        }
+
+        // P17 — Alexander Reid (Brand 3) → Marine Engineers — STATUS: Active
+        if (!await PlacementExistsAsync(db, candAlexanderReidB3, vacMarine, ct))
+        {
+            var p17Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacMarine, candAlexanderReidB3, null,
+                    today.AddDays(-7), null, 40m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p17Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P17 (Alexander Reid Brand 3 → Marine Engineers): {p17Result.Error.Message}");
+
+            var p17AcceptResult = await placementService.AcceptAsync(p17Result.Value, ct);
+            if (p17AcceptResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P17 accepting (Alexander Reid Brand 3 → Marine Engineers): {p17AcceptResult.Error.Message}");
+
+            var p17StartResult = await placementService.StartAsync(p17Result.Value, today.AddDays(-7), ct);
+            if (p17StartResult.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P17 starting (Alexander Reid Brand 3 → Marine Engineers): {p17StartResult.Error.Message}");
+        }
+
+        // P18 — Alexander Reid (Brand 1) → Site Manager — Thames Crossing — STATUS: Offered
+        seedCtx.CurrentTenantId = new TenantId(brand1.Id);
+
+        if (!await PlacementExistsAsync(db, candAlexanderReidB1, vacThamesCrossing, ct))
+        {
+            var p18Result = await placementService.CreateAsync(
+                new CreatePlacementCommand(
+                    vacThamesCrossing, candAlexanderReidB1, admin1Id,
+                    today.AddDays(14), null, 37.5m,
+                    null, null, null, null, null, null),
+                ct);
+            if (p18Result.IsFailure)
+                throw new InvalidOperationException($"Seed failed — P18 (Alexander Reid Brand 1 → Thames Crossing): {p18Result.Error.Message}");
+        }
+
+        logger.LogInformation(
+            "Seeded placement slice test data: {Total} placements across 3 brands. " +
+            "Status coverage: Offered ×{Offered}, Accepted ×{Accepted}, Active ×{Active}, " +
+            "Completed ×{Completed}, TerminatedEarly ×{TE}, Declined ×{Declined}, Cancelled ×{Cancelled}. " +
+            "Cross-brand person: Alexander Reid (Brand 1 Offered + Brand 3 Active).",
+            18, 4, 2, 6, 2, 1, 1, 1);
+    }
+
+    // (DisplayName, DateOfBirth, PrimaryPhoneRaw, NiNumberRaw, PassportNumberRaw)
+    private static List<(string DisplayName, DateOnly? Dob, string? Phone, string? NiNumber, string? Passport)>
+        PlacementPersonSeeds() =>
+    [
+        ("Jane Brown",         new DateOnly(1991,  5, 12), "+447700901001", "CA112233A", null),
+        ("Robert Davis",       new DateOnly(1983,  8, 22), "+447700901002", "EC223344B", null),
+        ("Sarah Wilson",       new DateOnly(1979,  3,  7), "+447700901003", "GH334455C", "234567001"),
+        ("Michael Taylor",     new DateOnly(1986, 11, 15), "+447700901004", "JK445566D", null),
+        ("Emma Johnson",       new DateOnly(1994,  2, 28), "+447700901005", "KL556677A", "234567005"),
+        ("Daniel Martinez",    new DateOnly(1988,  7,  4), null,            "MN667788B", null),
+        ("Lisa Anderson",      new DateOnly(1992,  9, 19), "+447700901007", "OP778899C", null),
+        ("Christopher Lee",    new DateOnly(1980, 12, 30), "+447700901008", "PR889900D", "234567008"),
+        ("Patricia Garcia",    new DateOnly(1985,  6, 17), "+447700901009", "ST990011A", null),
+        ("James Rodriguez",    new DateOnly(1977,  4,  2), "+447700901010", "TW001122B", null),
+        ("Mary Hernandez",     new DateOnly(1990, 10, 25), "+447700901011", "WX112233C", "234567011"),
+        ("William Thompson",   new DateOnly(1982,  1, 14), "+447700901012", "YZ223344D", null),
+        ("Karen White",        new DateOnly(1975,  8,  9), "+447700901013", "AB334455A", "234567013"),
+        ("Steven Clark",       new DateOnly(1989,  3, 21), "+447700901014", "CG445566B", null),
+        ("Nancy Lewis",        new DateOnly(1993, 11,  6), "+447700901015", "EJ556677C", null),
+        ("Alexander Reid",     new DateOnly(1987,  7, 30), "+447700901016", "GH667788D", "234567016"),
+    ];
+
+    private static async Task<Guid> GetCandidateIdAsync(
+        ElectCrmDbContext db,
+        Guid brandId,
+        Guid personId,
+        string personName,
+        CancellationToken ct)
+    {
+        var candidateId = await db.Candidates
+            .IgnoreQueryFilters()
+            .Where(c => c.AgencyBrandId == brandId && c.PersonId == personId)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (!candidateId.HasValue)
+            throw new InvalidOperationException($"Seed failed — candidate for '{personName}' not found in brand {brandId}.");
+
+        return candidateId.Value;
+    }
+
+    private static async Task<Guid> GetVacancyIdAsync(
+        ElectCrmDbContext db,
+        Guid brandId,
+        string roleTitle,
+        CancellationToken ct)
+    {
+        var vacancyId = await db.Vacancies
+            .IgnoreQueryFilters()
+            .Where(v => v.AgencyBrandId == brandId && v.RoleTitle == roleTitle)
+            .Select(v => (Guid?)v.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (!vacancyId.HasValue)
+            throw new InvalidOperationException($"Seed failed — vacancy '{roleTitle}' not found for brand {brandId}.");
+
+        return vacancyId.Value;
+    }
+
+    private static async Task<bool> PlacementExistsAsync(
+        ElectCrmDbContext db,
+        Guid candidateId,
+        Guid vacancyId,
+        CancellationToken ct)
+    {
+        return await db.Placements
+            .IgnoreQueryFilters()
+            .AnyAsync(p => p.CandidateId == candidateId && p.VacancyId == vacancyId, ct);
     }
 
     // Simulates tenant context for seeder code that runs outside of an HTTP request.

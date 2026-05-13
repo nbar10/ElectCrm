@@ -25,7 +25,8 @@
       "Bash(dotnet user-secrets *)",
       "Bash(/opt/homebrew/bin/sqlcmd *)",
       "Bash(cat)",
-      "Bash(dotnet script *)"
+      "Bash(dotnet script *)",
+      "Bash(dotnet ef *)"
     ]
   }
 }

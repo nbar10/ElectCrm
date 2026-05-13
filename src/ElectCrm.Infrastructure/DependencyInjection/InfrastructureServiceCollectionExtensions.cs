@@ -7,6 +7,7 @@ using ElectCrm.Infrastructure.Features.Candidates;
 using ElectCrm.Infrastructure.Features.Clients;
 using ElectCrm.Infrastructure.Features.Contacts;
 using ElectCrm.Infrastructure.Features.Persons;
+using ElectCrm.Infrastructure.Features.Placements;
 using ElectCrm.Infrastructure.Features.Vacancies;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Infrastructure.Persistence;
@@ -56,6 +57,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ContactService>();
         services.AddScoped<PersonService>();
         services.AddScoped<VacancyService>();
+        services.AddScoped<PlacementService>();
         services.AddScoped<IPersonHashingService, PersonHashingService>();
 
         return services;

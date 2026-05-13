@@ -2,6 +2,7 @@
 @page "/app/candidates/{Id:guid}"
 @attribute [Authorize(Policy = PolicyNames.AnyStaff)]
 @inject CandidateService CandidateService
+@inject PlacementService PlacementService
 @inject NavigationManager NavigationManager
 
 <PageTitle>@(_candidate?.PersonDisplayName ?? "Candidate") — Elect CRM</PageTitle>
@@ -114,7 +115,49 @@
             @* COMPLIANCE_SLICE — Right-to-work documents panel *@
             @* CARDS_SLICE — CSCS/CPCS/NPORS cards panel *@
             @* AVAILABILITY_SLICE — Availability calendar panel *@
-            @* PLACEMENT_SLICE — Placement history panel *@
+
+            @* Placement History Panel — PLACEMENT_SLICE resolved *@
+            <div class="elect-section" style="margin-top: var(--space-6);">
+                <div class="elect-section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="elect-section-title">Placement History</h2>
+                    @if (_candidate?.Status == CandidateStatus.Active)
+                    {
+                        <a href="/app/placements/new?candidateId=@Id" class="btn-gold" style="font-size: var(--font-sm);">Place into Vacancy</a>
+                    }
+                </div>
+                @if (!_candidatePlacements.Any())
+                {
+                    <div class="elect-empty-state">No placement history.</div>
+                }
+                else
+                {
+                    <table class="elect-table">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Role</th>
+                                <th>Client</th>
+                                <th>Status</th>
+                                <th>Start Date</th>
+                                <th>End Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in _candidatePlacements)
+                            {
+                                <tr>
+                                    <td><a href="/app/placements/@p.Id">@p.ReferenceNumber</a></td>
+                                    <td><a href="/app/vacancies/@p.VacancyId">@p.VacancyRoleTitle</a></td>
+                                    <td>@p.ClientName</td>
+                                    <td><span class="@PlacementBadgeClass(p.Status)">@p.Status</span></td>
+                                    <td>@p.ProposedStartDate.ToString("d MMM yyyy")</td>
+                                    <td>@(p.ActualEndDate.HasValue ? p.ActualEndDate.Value.ToString("d MMM yyyy") : "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
 
             <div class="elect-detail-actions">
                 <a href="/app/candidates/@Id/edit" class="btn-dark">Edit</a>
@@ -127,6 +170,7 @@
     [Parameter] public Guid Id { get; set; }
 
     private CandidateDetailDto? _candidate;
+    private IReadOnlyList<PlacementSummaryDto> _candidatePlacements = [];
     private string _initials = string.Empty;
     private string? _errorMessage;
     private bool _confirmDeactivate;
@@ -150,6 +194,11 @@
         }
 
         _candidate = result.Value;
+
+        var placementsResult = await PlacementService.GetPlacementsForCandidateAsync(Id, CancellationToken.None);
+        if (placementsResult.IsSuccess)
+            _candidatePlacements = placementsResult.Value;
+
         _newStatus = _candidate.Status;
         _initials = string.Concat(
             _candidate.PersonDisplayName
@@ -178,6 +227,18 @@
 
         _isChangingStatus = false;
     }
+
+    private static string PlacementBadgeClass(PlacementStatus status) => status switch
+    {
+        PlacementStatus.Offered         => "elect-badge elect-badge-warning",
+        PlacementStatus.Accepted        => "elect-badge elect-badge-info",
+        PlacementStatus.Active          => "elect-badge elect-badge-active",
+        PlacementStatus.Completed       => "elect-badge elect-badge-active",
+        PlacementStatus.TerminatedEarly => "elect-badge elect-badge-warning",
+        PlacementStatus.Declined        => "elect-badge elect-badge-retired",
+        PlacementStatus.Cancelled       => "elect-badge elect-badge-retired",
+        _                               => "elect-badge"
+    };
 
     private async Task ConfirmDeactivateAsync()
     {

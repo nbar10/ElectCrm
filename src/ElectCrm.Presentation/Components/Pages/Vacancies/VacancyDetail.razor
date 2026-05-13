@@ -2,6 +2,7 @@
 @page "/app/vacancies/{Id:guid}"
 @attribute [Authorize(Policy = PolicyNames.AnyStaff)]
 @inject VacancyService VacancyService
+@inject PlacementService PlacementService
 @inject NavigationManager NavigationManager
 
 <PageTitle>@(_vacancy?.RoleTitle ?? "Vacancy") — Elect CRM</PageTitle>
@@ -279,8 +280,51 @@
                 </div>
             }
 
+            @* Active Placements Panel — PLACEMENT_SLICE resolved *@
+            <div class="elect-section" style="margin-top: var(--space-6);">
+                <div class="elect-section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="elect-section-title">Placements</h2>
+                    @if (_vacancy.Status == VacancyStatus.Open || _vacancy.Status == VacancyStatus.Filled)
+                    {
+                        <a href="/app/placements/new?vacancyId=@Id" class="btn-gold" style="font-size: var(--font-sm);">Offer Candidate</a>
+                    }
+                </div>
+                <p style="color: var(--fg-2); font-size: var(--font-sm); margin-bottom: var(--space-3);">
+                    Filled: @(_vacancyPlacements.Count(p => p.Status == PlacementStatus.Accepted || p.Status == PlacementStatus.Active)) / @_vacancy.HeadcountRequired
+                </p>
+                @if (!_vacancyPlacements.Any())
+                {
+                    <div class="elect-empty-state">No placements yet for this vacancy.</div>
+                }
+                else
+                {
+                    <table class="elect-table">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Candidate</th>
+                                <th>Status</th>
+                                <th>Proposed Start</th>
+                                <th>Pay Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in _vacancyPlacements)
+                            {
+                                <tr>
+                                    <td><a href="/app/placements/@p.Id">@p.ReferenceNumber</a></td>
+                                    <td><a href="/app/candidates/@p.CandidateId">@p.CandidateName</a></td>
+                                    <td><span class="@PlacementBadgeClass(p.Status)">@p.Status</span></td>
+                                    <td>@p.ProposedStartDate.ToString("d MMM yyyy")</td>
+                                    <td>£@p.PayRateAmount.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+
             @* Out-of-scope placeholders *@
-            @* PLACEMENT_SLICE — Active Placements panel goes here *@
             @* DISTRIBUTION_SLICE — Distribution status and channel posts panel goes here *@
             @* COMPLIANCE_SLICE — Compliance validation results panel goes here *@
             @* AWR_SLICE — AWR period tracking goes here *@
@@ -307,6 +351,7 @@
     }
 
     private VacancyDetailDto? _vacancy;
+    private IReadOnlyList<PlacementSummaryDto> _vacancyPlacements = [];
     private bool _isAdmin;
     private string? _errorMessage;
     private string? _rateError;
@@ -335,6 +380,10 @@
 
         _vacancy = result.Value;
         InitRateForm();
+
+        var placementsResult = await PlacementService.GetPlacementsForVacancyAsync(Id, CancellationToken.None);
+        if (placementsResult.IsSuccess)
+            _vacancyPlacements = placementsResult.Value;
 
         // AuthState cascade may be null during the SSR prerender pass — guard and retry in OnAfterRenderAsync.
         if (AuthState is not null)
@@ -380,6 +429,10 @@
             _vacancy = result.Value;
             InitRateForm();
         }
+
+        var placementsResult = await PlacementService.GetPlacementsForVacancyAsync(Id, CancellationToken.None);
+        if (placementsResult.IsSuccess)
+            _vacancyPlacements = placementsResult.Value;
     }
 
     private async Task ReassignOwnerAsync()
@@ -503,5 +556,17 @@
         VacancyStatus.ClosedUnfilled => "elect-badge-retired",
         VacancyStatus.Cancelled => "elect-badge-retired",
         _ => string.Empty,
+    };
+
+    private static string PlacementBadgeClass(PlacementStatus status) => status switch
+    {
+        PlacementStatus.Offered         => "elect-badge elect-badge-warning",
+        PlacementStatus.Accepted        => "elect-badge elect-badge-info",
+        PlacementStatus.Active          => "elect-badge elect-badge-active",
+        PlacementStatus.Completed       => "elect-badge elect-badge-active",
+        PlacementStatus.TerminatedEarly => "elect-badge elect-badge-warning",
+        PlacementStatus.Declined        => "elect-badge elect-badge-retired",
+        PlacementStatus.Cancelled       => "elect-badge elect-badge-retired",
+        _                               => "elect-badge"
     };
 }

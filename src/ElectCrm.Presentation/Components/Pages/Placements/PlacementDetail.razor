@@ -1,0 +1,734 @@
+@rendermode InteractiveServer
+@page "/app/placements/{Id:guid}"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject PlacementService PlacementService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_placement?.ReferenceNumber ?? "Placement") — Elect CRM</PageTitle>
+
+<a href="/app/placements" class="back-link">← Placements</a>
+
+@if (_placement is not null)
+{
+    <div class="page-header">
+        <h1 class="page-header-title">@_placement.ReferenceNumber — @_placement.CandidateName</h1>
+        @* DS-GAP-015 — status badge: 7 placement statuses need distinct badge variants; using closest available *@
+        <span class="@PlacementBadgeClass(_placement.Status)">@_placement.Status</span>
+    </div>
+
+    <div class="elect-detail-card">
+        <div class="elect-detail-body">
+
+            @* Section: Placement *@
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Reference</span>
+                <span class="elect-detail-value">@_placement.ReferenceNumber</span>
+
+                <span class="elect-detail-label">Status</span>
+                <span class="elect-detail-value">
+                    <span class="@PlacementBadgeClass(_placement.Status)">@_placement.Status</span>
+                </span>
+
+                <span class="elect-detail-label">Created At</span>
+                <span class="elect-detail-value">@_placement.CreatedAt.ToString("d MMM yyyy HH:mm")</span>
+
+                <span class="elect-detail-label">Updated At</span>
+                <span class="elect-detail-value">@_placement.UpdatedAt.ToString("d MMM yyyy HH:mm")</span>
+            </div>
+
+            @* Section: Worker *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Candidate</span>
+                <span class="elect-detail-value">
+                    <a href="/app/candidates/@_placement.CandidateId" class="elect-detail-link">@_placement.CandidateName</a>
+                </span>
+
+                <span class="elect-detail-label">Vacancy</span>
+                <span class="elect-detail-value">
+                    <a href="/app/vacancies/@_placement.VacancyId" class="elect-detail-link">@_placement.VacancyReferenceNumber — @_placement.VacancyRoleTitle</a>
+                </span>
+
+                <span class="elect-detail-label">Client</span>
+                <span class="elect-detail-value">@_placement.ClientName</span>
+            </div>
+
+            @* Section: Schedule *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Proposed Start</span>
+                <span class="elect-detail-value">@_placement.ProposedStartDate.ToString("d MMM yyyy")</span>
+
+                <span class="elect-detail-label">Actual Start</span>
+                <span class="elect-detail-value">
+                    @(_placement.ActualStartDate.HasValue ? _placement.ActualStartDate.Value.ToString("d MMM yyyy") : "Not started")
+                </span>
+
+                <span class="elect-detail-label">Expected End</span>
+                <span class="elect-detail-value">
+                    @(_placement.ExpectedEndDate.HasValue ? _placement.ExpectedEndDate.Value.ToString("d MMM yyyy") : "Not set")
+                </span>
+
+                <span class="elect-detail-label">Actual End</span>
+                <span class="elect-detail-value">
+                    @(_placement.ActualEndDate.HasValue ? _placement.ActualEndDate.Value.ToString("d MMM yyyy") : "—")
+                </span>
+
+                <span class="elect-detail-label">Hours/Week</span>
+                <span class="elect-detail-value">@_placement.HoursPerWeek</span>
+            </div>
+
+            @* Section: Ownership *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label">Consultant</span>
+                <span class="elect-detail-value">@(_placement.ConsultantOwnerName ?? "Unassigned")</span>
+            </div>
+
+            @* Update Owner — DS-GAP-016 *@
+            <details style="margin-top: var(--space-3);">
+                <summary style="cursor: pointer; font-size: 0.875rem; color: var(--fg-2);">Update Owner</summary>
+                <div class="elect-form-section" style="margin-top: var(--space-2);">
+                    @* DS-GAP-016 — consultant picker; raw GUID input workaround *@
+                    <input class="elect-input" type="text" placeholder="00000000-0000-0000-0000-000000000000"
+                           @bind="_reassignGuid" />
+                    <div style="display: flex; gap: var(--space-2); margin-top: var(--space-2);">
+                        <button class="btn-gold-sm" @onclick="UpdateOwnerAsync">Assign</button>
+                    </div>
+                    @if (_reassignError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_reassignError</div>
+                    }
+                </div>
+            </details>
+
+            @* Section: Current Pay Rate *@
+            <div class="elect-detail-grid" style="margin-top: var(--space-4);">
+                <span class="elect-detail-label" style="font-weight: 600; grid-column: 1 / -1; color: var(--fg-1);">Current Pay Rate</span>
+
+                <span class="elect-detail-label">Pay Rate Amount</span>
+                <span class="elect-detail-value">£@_placement.PayRateAmount.ToString("N2")</span>
+
+                <span class="elect-detail-label">Currency</span>
+                <span class="elect-detail-value">@_placement.PayRateCurrency</span>
+
+                <span class="elect-detail-label">Engagement Type</span>
+                <span class="elect-detail-value">@_placement.EngagementType</span>
+
+                <span class="elect-detail-label">Holiday Pay Inclusive</span>
+                <span class="elect-detail-value">@(_placement.HolidayPayInclusive ? "Yes" : "No")</span>
+
+                @if (_placement.HolidayPayRate.HasValue)
+                {
+                    <span class="elect-detail-label">Holiday Pay Rate</span>
+                    <span class="elect-detail-value">@_placement.HolidayPayRate.Value.ToString("N4")</span>
+                }
+
+                @* TD-PLACEMENT-003: BillRate visibility here is role-gated (BrandAdmin/GroupAdmin only) per Plan 07 §13 CRIT-7. The Vacancy slice does not currently apply the same gating. See docs/tech-debt.md TD-PLACEMENT-003 — decision pending on whether Vacancy should be tightened to match, or this Placement gating relaxed. *@
+                @if (_isAdmin)
+                {
+                    <span class="elect-detail-label">Bill Rate</span>
+                    <span class="elect-detail-value">
+                        @(_placement.BillRate.HasValue ? $"£{_placement.BillRate.Value:N2}" : "—")
+                    </span>
+                }
+            </div>
+
+            @* Section: Rate at Offer (Snapshot) *@
+            @* DS-GAP-020 — rate snapshot comparison panel; collapsed details element as workaround *@
+            <details class="elect-detail-section" style="margin-top: var(--space-4);">
+                <summary style="cursor: pointer; font-weight: 600; padding: var(--space-2) 0;">Rate at Offer (Snapshot)</summary>
+                <div class="elect-detail-grid" style="margin-top: var(--space-2);">
+                    <span class="elect-detail-label">Snapshot Pay Rate</span>
+                    <span class="elect-detail-value">£@_placement.SnapshotPayRateAmount.ToString("N2")</span>
+
+                    <span class="elect-detail-label">Snapshot Engagement Type</span>
+                    <span class="elect-detail-value">@_placement.SnapshotEngagementType</span>
+
+                    <span class="elect-detail-label">Snapshot Taken At</span>
+                    <span class="elect-detail-value">@_placement.SnapshotTakenAt.ToString("d MMM yyyy HH:mm")</span>
+
+                    @if (_isAdmin)
+                    {
+                        <span class="elect-detail-label">Snapshot Bill Rate</span>
+                        <span class="elect-detail-value">
+                            @(_placement.SnapshotBillRate.HasValue ? $"£{_placement.SnapshotBillRate.Value:N2}" : "—")
+                        </span>
+                    }
+                </div>
+            </details>
+
+            @* Terms Edit Panel — shown when Offered or Accepted *@
+            @if (_placement.Status == PlacementStatus.Offered || _placement.Status == PlacementStatus.Accepted)
+            {
+                @* DS-GAP-008 — collapsible rate/terms edit panel *@
+                <details class="elect-detail-section" style="margin-top: var(--space-4);">
+                    <summary style="cursor: pointer; font-weight: 600; padding: var(--space-2) 0;">Edit Rates &amp; Terms</summary>
+                    <div class="elect-form-section">
+                        <div class="elect-field">
+                            <label class="elect-label">Pay Rate Amount</label>
+                            <input type="number" step="0.01" class="elect-input" @bind="_termsForm.PayRateAmount" />
+                        </div>
+                        <div class="elect-field">
+                            <label class="elect-label">Engagement Type</label>
+                            <InputSelect class="elect-input" @bind-Value="_termsForm.EngagementType">
+                                @foreach (var et in Enum.GetValues<EngagementType>())
+                                {
+                                    <option value="@et">@et</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="elect-field" style="flex-direction: row; gap: var(--space-3); align-items: center;">
+                            <input type="checkbox" id="hpInc" @bind="_termsForm.HolidayPayInclusive" />
+                            <label class="elect-label" for="hpInc" style="margin: 0;">Holiday Pay Inclusive</label>
+                        </div>
+                        @if (!_termsForm.HolidayPayInclusive)
+                        {
+                            <div class="elect-field">
+                                <label class="elect-label">Holiday Pay Rate</label>
+                                <input type="number" step="0.0001" class="elect-input" @bind="_termsForm.HolidayPayRate" />
+                            </div>
+                        }
+                        @if (_isAdmin)
+                        {
+                            <div class="elect-field">
+                                <label class="elect-label">Bill Rate</label>
+                                <input type="number" step="0.01" class="elect-input" @bind="_termsForm.BillRate" />
+                            </div>
+                        }
+                        <div class="elect-field">
+                            <label class="elect-label">Proposed Start Date</label>
+                            <input type="date" class="elect-input"
+                                   value="@_termsForm.ProposedStartDate.ToString("yyyy-MM-dd")"
+                                   @onchange="e => { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _termsForm.ProposedStartDate = d; }" />
+                        </div>
+                        <div class="elect-field">
+                            <label class="elect-label">Expected End Date</label>
+                            <input type="date" class="elect-input"
+                                   value="@(_termsForm.ExpectedEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                                   @onchange="e => { _termsForm.ExpectedEndDate = DateOnly.TryParse(e.Value?.ToString(), out var d) ? d : null; }" />
+                        </div>
+                        <div class="elect-field">
+                            <label class="elect-label">Hours/Week</label>
+                            <input type="number" step="0.5" class="elect-input" @bind="_termsForm.HoursPerWeek" />
+                        </div>
+                        <div class="elect-form-actions">
+                            <button class="btn-gold-sm" @onclick="UpdateTermsAsync" disabled="@_termsSubmitting">
+                                @(_termsSubmitting ? "Saving…" : "Save Terms")
+                            </button>
+                        </div>
+                        @if (_termsError is not null)
+                        {
+                            <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_termsError</div>
+                        }
+                    </div>
+                </details>
+            }
+            else if (_placement.Status == PlacementStatus.Active
+                     || _placement.Status == PlacementStatus.Completed
+                     || _placement.Status == PlacementStatus.TerminatedEarly
+                     || _placement.Status == PlacementStatus.Declined
+                     || _placement.Status == PlacementStatus.Cancelled)
+            {
+                <p style="color: var(--fg-2); margin-top: var(--space-4);">Terms cannot be changed once the placement is active.</p>
+            }
+
+            @* Status Workflow Panel *@
+            @* DS-GAP-018 — placement status workflow panel; inline conditional per status *@
+            @* DS-GAP-009 — same underlying pattern as vacancy status panel *@
+
+            @if (_placement.Status == PlacementStatus.Offered)
+            {
+                <div class="elect-detail-actions" style="margin-top: var(--space-4);">
+                    <p class="elect-form-section-title">Actions</p>
+
+                    <button class="btn-gold" @onclick="() => _showAcceptModal = true">Accept Offer</button>
+                    <button class="btn-outline" @onclick="() => { _showDeclineModal = true; _declineReason = string.Empty; _actionError = null; }">Decline</button>
+                    <button class="btn-outline" @onclick="() => { _showCancelModal = true; _cancelReason = string.Empty; _actionError = null; }">Cancel Placement</button>
+                </div>
+
+                @if (_showAcceptModal)
+                {
+                    <div class="elect-confirm-row" style="margin-top: var(--space-3);">
+                        <span class="elect-confirm-row-msg">Accept this offer and move to Accepted status?</span>
+                        <button class="btn-gold" @onclick="AcceptAsync" disabled="@_actionSubmitting">
+                            @(_actionSubmitting ? "Saving…" : "Confirm Accept")
+                        </button>
+                        <button class="btn-outline" @onclick="() => { _showAcceptModal = false; _actionError = null; }">Cancel</button>
+                    </div>
+                    @if (_actionError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_actionError</div>
+                    }
+                }
+
+                @if (_showDeclineModal)
+                {
+                    <div class="elect-confirm-row" style="margin-top: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+                        <span class="elect-confirm-row-msg">Decline this offer?</span>
+                        <textarea class="elect-input" rows="2" placeholder="Reason for declining (required)" style="flex: 1; min-width: 200px;"
+                                  @bind="_declineReason"></textarea>
+                        <button class="btn-outline" @onclick="DeclineAsync" disabled="@_actionSubmitting">
+                            @(_actionSubmitting ? "Saving…" : "Confirm Decline")
+                        </button>
+                        <button class="btn-outline" @onclick="() => { _showDeclineModal = false; _actionError = null; }">Cancel</button>
+                    </div>
+                    @if (_actionError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_actionError</div>
+                    }
+                }
+
+                @if (_showCancelModal)
+                {
+                    <div class="elect-confirm-row" style="margin-top: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+                        <span class="elect-confirm-row-msg">Cancel this placement?</span>
+                        <textarea class="elect-input" rows="2" placeholder="Reason for cancellation (required)" style="flex: 1; min-width: 200px;"
+                                  @bind="_cancelReason"></textarea>
+                        <button class="btn-outline" @onclick="CancelAsync" disabled="@_actionSubmitting">
+                            @(_actionSubmitting ? "Saving…" : "Confirm Cancel")
+                        </button>
+                        <button class="btn-outline" @onclick="() => { _showCancelModal = false; _actionError = null; }">Cancel</button>
+                    </div>
+                    @if (_actionError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_actionError</div>
+                    }
+                }
+            }
+            else if (_placement.Status == PlacementStatus.Accepted)
+            {
+                <div class="elect-detail-actions" style="margin-top: var(--space-4);">
+                    <p class="elect-form-section-title">Actions</p>
+
+                    @if (!_placement.BillRate.HasValue)
+                    {
+                        <div class="elect-alert elect-alert-warning" role="alert">
+                            Bill rate must be set before starting — edit rates above.
+                        </div>
+                    }
+                    else
+                    {
+                        <button class="btn-gold" @onclick="() => { _showStartModal = true; _actualStartDate = DateOnly.FromDateTime(DateTime.Today); _actionError = null; }">Mark as Started</button>
+                    }
+
+                    <button class="btn-outline" @onclick="() => { _showCancelModal = true; _cancelReason = string.Empty; _actionError = null; }">Cancel Placement</button>
+                </div>
+
+                @if (_showStartModal)
+                {
+                    <div class="elect-confirm-row" style="margin-top: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+                        <span class="elect-confirm-row-msg">Mark placement as started?</span>
+                        <div class="elect-field" style="margin: 0;">
+                            <label class="elect-label">Actual Start Date</label>
+                            <input type="date" class="elect-input"
+                                   value="@_actualStartDate.ToString("yyyy-MM-dd")"
+                                   @onchange="e => { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _actualStartDate = d; }" />
+                        </div>
+                        <button class="btn-gold" @onclick="StartAsync" disabled="@_actionSubmitting">
+                            @(_actionSubmitting ? "Saving…" : "Confirm Start")
+                        </button>
+                        <button class="btn-outline" @onclick="() => { _showStartModal = false; _actionError = null; }">Cancel</button>
+                    </div>
+                    @if (_actionError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_actionError</div>
+                    }
+                }
+
+                @if (_showCancelModal)
+                {
+                    <div class="elect-confirm-row" style="margin-top: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+                        <span class="elect-confirm-row-msg">Cancel this placement?</span>
+                        <textarea class="elect-input" rows="2" placeholder="Reason for cancellation (required)" style="flex: 1; min-width: 200px;"
+                                  @bind="_cancelReason"></textarea>
+                        <button class="btn-outline" @onclick="CancelAsync" disabled="@_actionSubmitting">
+                            @(_actionSubmitting ? "Saving…" : "Confirm Cancel")
+                        </button>
+                        <button class="btn-outline" @onclick="() => { _showCancelModal = false; _actionError = null; }">Cancel</button>
+                    </div>
+                    @if (_actionError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_actionError</div>
+                    }
+                }
+            }
+            else if (_placement.Status == PlacementStatus.Active)
+            {
+                <div class="elect-detail-actions" style="margin-top: var(--space-4);">
+                    <p class="elect-form-section-title">Actions</p>
+                    <button class="btn-dark" @onclick="() => { _showCompleteModal = true; _actualEndDate = DateOnly.FromDateTime(DateTime.Today); _actionError = null; }">Mark as Completed</button>
+                    <button class="btn-outline" @onclick="() => { _showTerminateModal = true; _terminateDate = DateOnly.FromDateTime(DateTime.Today); _terminateReason = string.Empty; _actionError = null; }">Terminate Early</button>
+                </div>
+
+                @if (_showCompleteModal)
+                {
+                    <div class="elect-confirm-row" style="margin-top: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+                        <span class="elect-confirm-row-msg">Mark placement as completed?</span>
+                        <div class="elect-field" style="margin: 0;">
+                            <label class="elect-label">Actual End Date</label>
+                            <input type="date" class="elect-input"
+                                   value="@_actualEndDate.ToString("yyyy-MM-dd")"
+                                   @onchange="e => { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _actualEndDate = d; }" />
+                        </div>
+                        <button class="btn-dark" @onclick="CompleteAsync" disabled="@_actionSubmitting">
+                            @(_actionSubmitting ? "Saving…" : "Confirm Complete")
+                        </button>
+                        <button class="btn-outline" @onclick="() => { _showCompleteModal = false; _actionError = null; }">Cancel</button>
+                    </div>
+                    @if (_actionError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_actionError</div>
+                    }
+                }
+
+                @if (_showTerminateModal)
+                {
+                    <div class="elect-confirm-row" style="margin-top: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
+                        <span class="elect-confirm-row-msg">Terminate this placement early?</span>
+                        <div class="elect-field" style="margin: 0;">
+                            <label class="elect-label">End Date</label>
+                            <input type="date" class="elect-input"
+                                   value="@_terminateDate.ToString("yyyy-MM-dd")"
+                                   @onchange="e => { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _terminateDate = d; }" />
+                        </div>
+                        <textarea class="elect-input" rows="2" placeholder="Reason for early termination (required)" style="flex: 1; min-width: 200px;"
+                                  @bind="_terminateReason"></textarea>
+                        <button class="btn-outline" @onclick="TerminateEarlyAsync" disabled="@_actionSubmitting">
+                            @(_actionSubmitting ? "Saving…" : "Confirm Terminate")
+                        </button>
+                        <button class="btn-outline" @onclick="() => { _showTerminateModal = false; _actionError = null; }">Cancel</button>
+                    </div>
+                    @if (_actionError is not null)
+                    {
+                        <div class="elect-alert elect-alert-error" role="alert" style="margin-top: var(--space-2);">@_actionError</div>
+                    }
+                }
+            }
+            else if (_placement.Status == PlacementStatus.Completed
+                     || _placement.Status == PlacementStatus.TerminatedEarly
+                     || _placement.Status == PlacementStatus.Declined
+                     || _placement.Status == PlacementStatus.Cancelled)
+            {
+                <div class="elect-alert elect-alert-info" style="margin-top: var(--space-4);">
+                    @_placement.Status@(_placement.StatusReason is not null ? $" — {_placement.StatusReason}" : string.Empty)
+                </div>
+            }
+
+            @* Out-of-scope placeholders *@
+            @* TIMESHEET_SLICE — Timesheet entries panel goes here *@
+            @* PAYROLL_SLICE — Pay calculation summary goes here *@
+            @* AWR_SLICE — AWR qualifying clock panel goes here *@
+            @* COMPLIANCE_SLICE — Compliance document requirements panel goes here *@
+            @* SHIFT_SLICE — Shift rota pattern panel goes here *@
+            @* PLACEMENT_EXTENSION_SLICE — Extend / renew action goes here *@
+            @* IR35_SLICE — IR35 status panel goes here *@
+            @* FINANCE_SLICE — Margin calculation panel goes here *@
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private sealed class TermsFormModel
+    {
+        public decimal PayRateAmount { get; set; }
+        public string PayRateCurrency { get; set; } = "GBP";
+        public EngagementType EngagementType { get; set; } = EngagementType.PAYE;
+        public bool HolidayPayInclusive { get; set; }
+        public decimal? HolidayPayRate { get; set; }
+        public decimal? BillRate { get; set; }
+        public DateOnly ProposedStartDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public DateOnly? ExpectedEndDate { get; set; }
+        public decimal HoursPerWeek { get; set; } = 37.5m;
+    }
+
+    private PlacementDetailDto? _placement;
+    private bool _isAdmin;
+
+    // Action modal state
+    private bool _showAcceptModal;
+    private bool _showDeclineModal;
+    private string _declineReason = string.Empty;
+    private bool _showCancelModal;
+    private string _cancelReason = string.Empty;
+    private bool _showStartModal;
+    private DateOnly _actualStartDate = DateOnly.FromDateTime(DateTime.Today);
+    private bool _showCompleteModal;
+    private DateOnly _actualEndDate = DateOnly.FromDateTime(DateTime.Today);
+    private bool _showTerminateModal;
+    private DateOnly _terminateDate = DateOnly.FromDateTime(DateTime.Today);
+    private string _terminateReason = string.Empty;
+    private string? _actionError;
+    private bool _actionSubmitting;
+
+    // Terms form
+    private readonly TermsFormModel _termsForm = new();
+    private bool _termsSubmitting;
+    private string? _termsError;
+
+    // Owner reassignment
+    private string _reassignGuid = string.Empty;
+    private string? _reassignError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await PlacementService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            NavigationManager.NavigateTo("/app/placements");
+            return;
+        }
+
+        _placement = result.Value;
+        InitTermsForm();
+
+        if (AuthState is not null)
+            await ResolveAdminAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _isAdmin || AuthState is null)
+            return;
+
+        await ResolveAdminAsync();
+        StateHasChanged();
+    }
+
+    private async Task ResolveAdminAsync()
+    {
+        var auth = await AuthState;
+        _isAdmin = auth.User.Claims.Any(c =>
+            c.Type == ElectClaimTypes.Role &&
+            (c.Value.StartsWith("BrandAdmin", StringComparison.Ordinal) ||
+             c.Value.StartsWith("GroupAdmin", StringComparison.Ordinal)));
+    }
+
+    private void InitTermsForm()
+    {
+        if (_placement is null)
+            return;
+
+        _termsForm.PayRateAmount = _placement.PayRateAmount;
+        _termsForm.PayRateCurrency = _placement.PayRateCurrency;
+        _termsForm.EngagementType = _placement.EngagementType;
+        _termsForm.HolidayPayInclusive = _placement.HolidayPayInclusive;
+        _termsForm.HolidayPayRate = _placement.HolidayPayRate;
+        _termsForm.BillRate = _placement.BillRate;
+        _termsForm.ProposedStartDate = _placement.ProposedStartDate;
+        _termsForm.ExpectedEndDate = _placement.ExpectedEndDate;
+        _termsForm.HoursPerWeek = _placement.HoursPerWeek;
+    }
+
+    private async Task ReloadAsync()
+    {
+        var result = await PlacementService.GetByIdAsync(Id, CancellationToken.None);
+        if (result.IsSuccess)
+        {
+            _placement = result.Value;
+            InitTermsForm();
+        }
+    }
+
+    private async Task AcceptAsync()
+    {
+        _actionSubmitting = true;
+        _actionError = null;
+
+        var result = await PlacementService.AcceptAsync(Id, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _showAcceptModal = false;
+            await ReloadAsync();
+        }
+        else
+        {
+            _actionError = result.Error.Message;
+        }
+
+        _actionSubmitting = false;
+    }
+
+    private async Task DeclineAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_declineReason))
+        {
+            _actionError = "A reason is required to decline.";
+            return;
+        }
+
+        _actionSubmitting = true;
+        _actionError = null;
+
+        var result = await PlacementService.DeclineAsync(Id, _declineReason, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _showDeclineModal = false;
+            await ReloadAsync();
+        }
+        else
+        {
+            _actionError = result.Error.Message;
+        }
+
+        _actionSubmitting = false;
+    }
+
+    private async Task CancelAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_cancelReason))
+        {
+            _actionError = "A reason is required to cancel.";
+            return;
+        }
+
+        _actionSubmitting = true;
+        _actionError = null;
+
+        var result = await PlacementService.CancelAsync(Id, _cancelReason, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _showCancelModal = false;
+            await ReloadAsync();
+        }
+        else
+        {
+            _actionError = result.Error.Message;
+        }
+
+        _actionSubmitting = false;
+    }
+
+    private async Task StartAsync()
+    {
+        _actionSubmitting = true;
+        _actionError = null;
+
+        var result = await PlacementService.StartAsync(Id, _actualStartDate, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _showStartModal = false;
+            await ReloadAsync();
+        }
+        else
+        {
+            _actionError = result.Error.Message;
+        }
+
+        _actionSubmitting = false;
+    }
+
+    private async Task CompleteAsync()
+    {
+        _actionSubmitting = true;
+        _actionError = null;
+
+        var result = await PlacementService.CompleteAsync(Id, _actualEndDate, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _showCompleteModal = false;
+            await ReloadAsync();
+        }
+        else
+        {
+            _actionError = result.Error.Message;
+        }
+
+        _actionSubmitting = false;
+    }
+
+    private async Task TerminateEarlyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_terminateReason))
+        {
+            _actionError = "A reason is required for early termination.";
+            return;
+        }
+
+        _actionSubmitting = true;
+        _actionError = null;
+
+        var result = await PlacementService.TerminateEarlyAsync(Id, _terminateDate, _terminateReason, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _showTerminateModal = false;
+            await ReloadAsync();
+        }
+        else
+        {
+            _actionError = result.Error.Message;
+        }
+
+        _actionSubmitting = false;
+    }
+
+    private async Task UpdateTermsAsync()
+    {
+        _termsSubmitting = true;
+        _termsError = null;
+
+        var command = new UpdatePlacementTermsCommand(
+            _termsForm.PayRateAmount,
+            string.IsNullOrWhiteSpace(_termsForm.PayRateCurrency) ? "GBP" : _termsForm.PayRateCurrency,
+            _termsForm.EngagementType,
+            _termsForm.HolidayPayInclusive,
+            _termsForm.HolidayPayInclusive ? null : _termsForm.HolidayPayRate,
+            _termsForm.BillRate,
+            _termsForm.ProposedStartDate,
+            _termsForm.ExpectedEndDate,
+            _termsForm.HoursPerWeek);
+
+        var result = await PlacementService.UpdateTermsAsync(Id, command, CancellationToken.None);
+
+        _termsSubmitting = false;
+
+        if (result.IsSuccess)
+            await ReloadAsync();
+        else
+            _termsError = result.Error.Message;
+    }
+
+    private async Task UpdateOwnerAsync()
+    {
+        _reassignError = null;
+        Guid? parsedGuid = Guid.TryParse(_reassignGuid, out var g) && g != Guid.Empty ? g : null;
+
+        var result = await PlacementService.UpdateOwnerAsync(
+            Id,
+            new UpdatePlacementOwnerCommand(parsedGuid),
+            CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _reassignGuid = string.Empty;
+            await ReloadAsync();
+        }
+        else
+        {
+            _reassignError = result.Error.Message;
+        }
+    }
+
+    // DS-GAP-015 — status badge: 7 placement statuses need distinct badge variants; using closest available
+    private static string PlacementBadgeClass(PlacementStatus status) => status switch
+    {
+        PlacementStatus.Offered         => "elect-badge elect-badge-warning",
+        PlacementStatus.Accepted        => "elect-badge elect-badge-info",
+        PlacementStatus.Active          => "elect-badge elect-badge-active",
+        PlacementStatus.Completed       => "elect-badge elect-badge-active",
+        PlacementStatus.TerminatedEarly => "elect-badge elect-badge-warning",
+        PlacementStatus.Declined        => "elect-badge elect-badge-retired",
+        PlacementStatus.Cancelled       => "elect-badge elect-badge-retired",
+        _                               => "elect-badge"
+    };
+}

@@ -151,6 +151,43 @@ Plan 05 specified `AgentPersonaName` in the detail DTO; it was omitted during im
 
 ---
 
+---
+
+## Placement Slice (plan 07 — architectural known limitations, pre-implementation)
+
+These items are not code-review findings. They are design constraints accepted in Plan 07 that carry runtime risk and must be revisited before production load or before the dependent slice is built.
+
+### 🟡 Warning
+
+**TD-027 — Vacancy auto-fill / auto-reopen is best-effort — silent inconsistency on failure**
+`PlacementService.AcceptAsync`, `CancelAsync`, and `TerminateEarlyAsync` call `VacancyService.ChangeStatusAsync` to auto-fill or auto-reopen the vacancy after a headcount-relevant transition. If that call fails (e.g. the vacancy was already manually closed), the failure is logged as a warning and the placement transition is still returned as success. The consultant sees a committed placement but an inconsistent vacancy fill count.
+- Plan reference: Plan 07 §6.4, §6.9, §6.7; CRIT-4; OQ-05
+- Fix when: event sourcing or an outbox pattern is introduced. For now, add a reconcile-headcount admin action or a scheduled consistency check. Tag: `// SAGA_SLICE`
+
+**TD-028 — Headcount reduction after placements exist produces incorrect auto-reopen results**
+The auto-reopen logic in `TerminateEarlyAsync` and `CancelAsync` compares `remainingCount < vacancy.HeadcountRequired`. If a consultant reduces `HeadcountRequired` on the vacancy after placements are already `Accepted` or `Active`, the remaining-count check becomes inaccurate and may reopen a vacancy that should remain filled, or fail to reopen one that should.
+- Plan reference: Plan 07 §6.7, CRIT-4; flagged with `// PLACEMENT_HEADCOUNT_REDUCTION_SLICE`
+- Fix when: the Vacancy edit flow is hardened. Guard: disallow reducing `HeadcountRequired` below the current `Accepted + Active` placement count, or add a reconcile step in `UpdateDetailsAsync`.
+
+**TD-029 — Concurrent placement creates have a TOCTOU window — no database-level uniqueness guard**
+`PlacementService.CreateAsync` checks for an existing `Offered/Accepted/Active` placement for the same `CandidateId` before inserting. This is a service-layer check with no serialisable transaction around it. Two concurrent requests can both pass the check and insert duplicate active placements for the same candidate.
+- Plan reference: Plan 07 CRIT-3
+- Fix when: duplicate placements are observed in production. Options: wrap the check + insert in a `Serializable` transaction (same pattern as reference number generation), or add a filtered unique index on `(CandidateId)` where `Status IN (Offered, Accepted, Active)` if the database supports it.
+
+### 🟢 Note
+
+**TD-030 — Cross-brand concurrent placement for the same Person is not prevented**
+The uniqueness check in `PlacementService.CreateAsync` is scoped to a single brand via the EF Core global query filter. A `Person` with two `Candidate` records (one per brand, valid in multi-brand operations) can be placed concurrently by both brands. This is accepted as a policy question — Brand A's service cannot see Brand B's placements by design.
+- Plan reference: Plan 07 CRIT-3
+- Fix when: cross-brand uniqueness becomes a compliance requirement (likely AWR or Compliance slice). Requires a cross-brand query via `PersonId` → `Candidate.PersonId` lookup with `IgnoreQueryFilters()`.
+
+**TD-031 — `HoursPerWeek` is immutable after Active with no time-effective mechanism**
+Once a placement transitions to `Active`, `HoursPerWeek` is locked (changing it would corrupt the AWR qualifying-time calculation). If an employer changes the hours arrangement mid-placement, there is no way to record this in the current model. The placement record will carry the original hours for the full duration.
+- Plan reference: Plan 07 CRIT-6; OQ-07; flagged with `// AWR_SLICE`
+- Fix when: the AWR Slice is planned. The AWR Slice will need a time-effective hours mechanism — either a `PlacementHoursChangedEvent` with an effective date, or a separate `PlacementHoursHistory` child table.
+
+---
+
 ## Won't Fix / Intentional (continued)
 
 **TD-W02 — Seeder idempotency: SeedAdminUserAsync skips if user exists but does not reconcile missing claims**

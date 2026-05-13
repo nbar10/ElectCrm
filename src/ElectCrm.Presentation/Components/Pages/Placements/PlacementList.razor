@@ -1,0 +1,201 @@
+@rendermode InteractiveServer
+@page "/app/placements"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject PlacementService PlacementService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Placements — Elect CRM</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-header-title">Placements</h1>
+    <a href="/app/placements/new" class="btn-gold">New Placement</a>
+</div>
+
+@* BULK_PLACEMENT_SLICE — bulk creation goes here *@
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <div class="elect-field" style="margin: 0; flex: 1; min-width: 200px; max-width: 320px;">
+        <label class="elect-label" for="searchTerm">Search</label>
+        <input type="text" id="searchTerm" class="elect-input" placeholder="Reference, candidate, or vacancy…"
+               @bind="_searchTerm"
+               @bind:event="oninput"
+               @onkeyup="HandleSearchKeyUp" />
+    </div>
+    <div class="elect-field" style="margin: 0;">
+        <label class="elect-label" for="statusFilter">Status</label>
+        <select id="statusFilter" class="elect-input" @bind="_statusFilterText" @bind:after="ResetAndSearchAsync">
+            <option value="">All Statuses</option>
+            @foreach (var s in Enum.GetValues<PlacementStatus>())
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+    </div>
+    @* DS-GAP-013 — Consultant filter dropdown: needs Users list for current brand *@
+    @* DS-GAP-017 — date range filter inputs go here *@
+    <button class="btn-outline" @onclick="ResetAndSearchAsync">Apply</button>
+</div>
+
+@if (_isLoading)
+{
+    <p>Loading...</p>
+}
+else if (_result is not null && _result.TotalCount == 0)
+{
+    <div class="elect-empty-state">No placements found.</div>
+}
+else if (_result is not null)
+{
+    <div class="elect-table-wrap">
+        <table class="elect-table">
+            <thead>
+                <tr>
+                    <th>Reference</th>
+                    <th>Candidate</th>
+                    <th>Role</th>
+                    <th>Client</th>
+                    <th>Status</th>
+                    <th>Start Date</th>
+                    <th>Pay Rate</th>
+                    <th>Consultant</th>
+                    <th class="col-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in _result.Items)
+                {
+                    <tr @key="p.Id">
+                        <td><a href="/app/placements/@p.Id">@p.ReferenceNumber</a></td>
+                        <td><a href="/app/candidates/@p.CandidateId">@p.CandidateName</a></td>
+                        <td><a href="/app/vacancies/@p.VacancyId">@p.VacancyRoleTitle</a></td>
+                        <td>@p.ClientName</td>
+                        <td>
+                            @* DS-GAP-015 — status badge: 7 placement statuses need distinct badge variants; using closest available *@
+                            <span class="@PlacementBadgeClass(p.Status)">@p.Status</span>
+                        </td>
+                        <td>@p.ProposedStartDate.ToString("d MMM yyyy")</td>
+                        <td>£@p.PayRateAmount.ToString("N2")/@p.EngagementType</td>
+                        <td>@(p.ConsultantOwnerName ?? "—")</td>
+                        <td class="col-right">
+                            <div class="elect-table-actions">
+                                <a href="/app/placements/@p.Id" class="btn-outline">View</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="elect-pagination">
+        <span class="elect-pagination-info">Page @_result.Page of @_result.TotalPages (@_result.TotalCount total)</span>
+        <div class="elect-pagination-controls">
+            <button class="btn-outline" @onclick="PreviousPageAsync" disabled="@(!_result.HasPreviousPage)">Previous</button>
+            <button class="btn-outline" @onclick="NextPageAsync" disabled="@(!_result.HasNextPage)">Next</button>
+        </div>
+    </div>
+}
+
+@code {
+    private int _page = 1;
+    private const int PageSize = 20;
+    private string? _searchTerm;
+    private string _statusFilterText = string.Empty;
+    private PlacementStatus? StatusFilter =>
+        Enum.TryParse<PlacementStatus>(_statusFilterText, out var s) ? s : null;
+    private PagedResult<PlacementSummaryDto>? _result;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    private System.Threading.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var query = new PlacementSearchQuery(
+            _searchTerm,
+            StatusFilter,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            _page,
+            PageSize);
+
+        var result = await PlacementService.SearchAsync(query, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _result = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task ResetAndSearchAsync()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private void HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Threading.Timer(
+            async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    _page = 1;
+                    await LoadAsync();
+                    StateHasChanged();
+                });
+            },
+            null,
+            400,
+            System.Threading.Timeout.Infinite);
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        _page--;
+        await LoadAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        _page++;
+        await LoadAsync();
+    }
+
+    // DS-GAP-015 — status badge: 7 placement statuses need distinct badge variants; using closest available
+    private static string PlacementBadgeClass(PlacementStatus status) => status switch
+    {
+        PlacementStatus.Offered         => "elect-badge elect-badge-warning",
+        PlacementStatus.Accepted        => "elect-badge elect-badge-info",
+        PlacementStatus.Active          => "elect-badge elect-badge-active",
+        PlacementStatus.Completed       => "elect-badge elect-badge-active",
+        PlacementStatus.TerminatedEarly => "elect-badge elect-badge-warning",
+        PlacementStatus.Declined        => "elect-badge elect-badge-retired",
+        PlacementStatus.Cancelled       => "elect-badge elect-badge-retired",
+        _                               => "elect-badge"
+    };
+}

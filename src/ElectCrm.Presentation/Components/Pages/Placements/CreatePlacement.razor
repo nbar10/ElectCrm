@@ -1,0 +1,281 @@
+@rendermode InteractiveServer
+@page "/app/placements/new"
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject PlacementService PlacementService
+@inject VacancyService VacancyService
+@inject CandidateService CandidateService
+@inject NavigationManager NavigationManager
+
+<PageTitle>New Placement — Elect CRM</PageTitle>
+
+<a href="/app/placements" class="back-link">← Placements</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">New Placement</h1>
+</div>
+
+@* AI_ENGAGEMENT_SLICE — when the Candidate Engagement Agent confirms a placement, it will submit a populated CreatePlacementCommand to PlacementService.CreateAsync. This form's model must remain serialisable to that command without form-state dependencies. *@
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div class="elect-form-card">
+    <EditForm Model="_form" OnValidSubmit="HandleSubmitAsync">
+        <DataAnnotationsValidator />
+
+        @* Vacancy picker *@
+        <div class="elect-field">
+            <label class="elect-label">Vacancy</label>
+            @if (_prefillVacancyName is not null)
+            {
+                <p style="color: var(--fg-1); font-size: 0.9375rem;">@_prefillVacancyName</p>
+                <input type="hidden" value="@_form.VacancyId" />
+            }
+            else
+            {
+                @* DS-GAP-014 — vacancy picker: needs searchable dropdown for large lists *@
+                <select class="elect-input" @bind="_form.VacancyId">
+                    <option value="@Guid.Empty">— Select a Vacancy —</option>
+                    @foreach (var v in _vacancies)
+                    {
+                        <option value="@v.Id">@v.ReferenceNumber — @v.RoleTitle (@v.ClientName)</option>
+                    }
+                </select>
+            }
+        </div>
+
+        @* Candidate picker *@
+        <div class="elect-field">
+            <label class="elect-label">Candidate</label>
+            @if (_prefillCandidateName is not null)
+            {
+                <p style="color: var(--fg-1); font-size: 0.9375rem;">@_prefillCandidateName</p>
+                <input type="hidden" value="@_form.CandidateId" />
+            }
+            else
+            {
+                @* DS-GAP-013 — candidate picker: needs searchable dropdown for large lists *@
+                <select class="elect-input" @bind="_form.CandidateId">
+                    <option value="@Guid.Empty">— Select a Candidate —</option>
+                    @foreach (var c in _candidates)
+                    {
+                        <option value="@c.Id">@c.PersonDisplayName</option>
+                    }
+                </select>
+            }
+        </div>
+
+        @* Consultant owner *@
+        <div class="elect-field">
+            <label class="elect-label">Consultant Owner (optional)</label>
+            @* DS-GAP-016 — consultant picker; raw GUID input *@
+            <input type="text" class="elect-input" placeholder="00000000-0000-0000-0000-000000000000"
+                   @bind="_consultantGuidText" />
+        </div>
+
+        @* Schedule *@
+        <div class="elect-field">
+            <label class="elect-label">Proposed Start Date</label>
+            <input type="date" class="elect-input"
+                   value="@_form.ProposedStartDate.ToString("yyyy-MM-dd")"
+                   @onchange="e => { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _form.ProposedStartDate = d; }" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Expected End Date (optional)</label>
+            <input type="date" class="elect-input"
+                   value="@(_form.ExpectedEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                   @onchange="e => { _form.ExpectedEndDate = DateOnly.TryParse(e.Value?.ToString(), out var d) ? d : null; }" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Hours/Week</label>
+            <input type="number" step="0.5" class="elect-input" @bind="_form.HoursPerWeek" />
+        </div>
+
+        @* Pay Rate *@
+        @* DS-GAP-010 — engagement type should be radio group *@
+        <div class="elect-field">
+            <label class="elect-label">Pay Rate Amount (optional — defaults to vacancy rate)</label>
+            <input type="number" step="0.01" class="elect-input" @bind="_form.PayRateAmount" />
+        </div>
+
+        <div class="elect-field">
+            <label class="elect-label">Engagement Type</label>
+            <InputSelect class="elect-input" @bind-Value="_form.EngagementType">
+                @foreach (var et in Enum.GetValues<EngagementType>())
+                {
+                    <option value="@et">@et</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="elect-field" style="flex-direction: row; gap: var(--space-3); align-items: center;">
+            <InputCheckbox @bind-Value="_form.HolidayPayInclusive" id="hpInc" />
+            <label class="elect-label" for="hpInc" style="margin: 0;">Holiday Pay Inclusive</label>
+        </div>
+
+        @if (!_form.HolidayPayInclusive)
+        {
+            <div class="elect-field">
+                <label class="elect-label">Holiday Pay Rate (optional)</label>
+                <input type="number" step="0.0001" class="elect-input" @bind="_form.HolidayPayRate" />
+            </div>
+        }
+
+        @* Bill Rate — admin only *@
+        @if (_isAdmin)
+        {
+            <div class="elect-field">
+                <label class="elect-label">Bill Rate (admin only)</label>
+                <input type="number" step="0.01" class="elect-input" @bind="_form.BillRate" />
+            </div>
+        }
+
+        <div class="elect-form-actions">
+            <button type="submit" class="btn-gold" disabled="@_isSubmitting">
+                @(_isSubmitting ? "Creating…" : "Create Placement")
+            </button>
+            <a href="/app/placements" class="btn-outline">Cancel</a>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "vacancyId")]
+    public Guid? VacancyId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "candidateId")]
+    public Guid? CandidateId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private sealed class FormModel
+    {
+        public Guid VacancyId { get; set; }
+        public Guid CandidateId { get; set; }
+        public DateOnly ProposedStartDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public DateOnly? ExpectedEndDate { get; set; }
+        public decimal HoursPerWeek { get; set; } = 37.5m;
+        public decimal? PayRateAmount { get; set; }
+        public string PayRateCurrency { get; set; } = "GBP";
+        public EngagementType EngagementType { get; set; } = EngagementType.PAYE;
+        public bool HolidayPayInclusive { get; set; }
+        public decimal? HolidayPayRate { get; set; }
+        public decimal? BillRate { get; set; }
+    }
+
+    private readonly FormModel _form = new();
+    private string _consultantGuidText = string.Empty;
+    private bool _isSubmitting;
+    private bool _isAdmin;
+    private string? _errorMessage;
+
+    private IReadOnlyList<VacancySummaryDto> _vacancies = [];
+    private IReadOnlyList<CandidateSummaryDto> _candidates = [];
+    private string? _prefillVacancyName;
+    private string? _prefillCandidateName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load vacancies (Open + Filled) for picker
+        var openResult = await VacancyService.SearchAsync(
+            new VacancySearchQuery(null, VacancyStatus.Open, null, null, null, 1, 200),
+            CancellationToken.None);
+        var filledResult = await VacancyService.SearchAsync(
+            new VacancySearchQuery(null, VacancyStatus.Filled, null, null, null, 1, 200),
+            CancellationToken.None);
+
+        var combined = new List<VacancySummaryDto>();
+        if (openResult.IsSuccess)
+            combined.AddRange(openResult.Value.Items);
+        if (filledResult.IsSuccess)
+            combined.AddRange(filledResult.Value.Items);
+
+        _vacancies = combined;
+
+        // Load candidates for picker
+        var candidateResult = await CandidateService.SearchAsync(
+            new CandidateSearchQuery(null, CandidateStatus.Active, null, 1, 200),
+            CancellationToken.None);
+
+        if (candidateResult.IsSuccess)
+            _candidates = candidateResult.Value.Items;
+
+        // Pre-fill from query string
+        if (VacancyId.HasValue && VacancyId.Value != Guid.Empty)
+        {
+            _form.VacancyId = VacancyId.Value;
+            var vacancyDetail = await VacancyService.GetByIdAsync(VacancyId.Value, CancellationToken.None);
+            if (vacancyDetail.IsSuccess)
+                _prefillVacancyName = $"{vacancyDetail.Value.ReferenceNumber} — {vacancyDetail.Value.RoleTitle}";
+        }
+
+        if (CandidateId.HasValue && CandidateId.Value != Guid.Empty)
+        {
+            _form.CandidateId = CandidateId.Value;
+            var candidateDetail = await CandidateService.GetByIdAsync(CandidateId.Value, CancellationToken.None);
+            if (candidateDetail.IsSuccess)
+                _prefillCandidateName = candidateDetail.Value.PersonDisplayName;
+        }
+
+        // Admin check
+        if (AuthState is not null)
+            await ResolveAdminAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _isAdmin || AuthState is null)
+            return;
+
+        await ResolveAdminAsync();
+        StateHasChanged();
+    }
+
+    private async Task ResolveAdminAsync()
+    {
+        var auth = await AuthState;
+        _isAdmin = auth.User.Claims.Any(c =>
+            c.Type == ElectClaimTypes.Role &&
+            (c.Value.StartsWith("BrandAdmin", StringComparison.Ordinal) ||
+             c.Value.StartsWith("GroupAdmin", StringComparison.Ordinal)));
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        Guid? consultantOwnerId = Guid.TryParse(_consultantGuidText, out var g) && g != Guid.Empty ? g : null;
+
+        var command = new CreatePlacementCommand(
+            _form.VacancyId,
+            _form.CandidateId,
+            consultantOwnerId,
+            _form.ProposedStartDate,
+            _form.ExpectedEndDate,
+            _form.HoursPerWeek,
+            _form.PayRateAmount,
+            _form.PayRateCurrency,
+            _form.EngagementType,
+            _form.HolidayPayInclusive,
+            _form.HolidayPayInclusive ? null : _form.HolidayPayRate,
+            _form.BillRate);
+
+        var result = await PlacementService.CreateAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/app/placements/{result.Value}");
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+}

@@ -8,6 +8,7 @@ using ElectCrm.Domain.Common;
 using ElectCrm.Domain.Contacts;
 using ElectCrm.Domain.Persons;
 using ElectCrm.Domain.Users;
+using ElectCrm.Domain.Placements;
 using ElectCrm.Domain.Vacancies;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Shared;
@@ -33,6 +34,7 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
     public DbSet<Person> Persons => Set<Person>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Vacancy> Vacancies => Set<Vacancy>();
+    public DbSet<Placement> Placements => Set<Placement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +81,10 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
                  && !e.IsDeleted);
 
         modelBuilder.Entity<Vacancy>().HasQueryFilter(
+            e => _tenantContext.CurrentTenantId == TenantId.Empty
+                 || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value);
+
+        modelBuilder.Entity<Placement>().HasQueryFilter(
             e => _tenantContext.CurrentTenantId == TenantId.Empty
                  || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value);
     }
