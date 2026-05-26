@@ -26,7 +26,16 @@
       "Bash(/opt/homebrew/bin/sqlcmd *)",
       "Bash(cat)",
       "Bash(dotnet script *)",
-      "Bash(dotnet ef *)"
+      "Bash(dotnet ef *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(sqlcmd *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(sed -i '' 's/CMK_NI_Worker/CMK_AzureKeyVault/g; s/CEK_NI_Worker/CEK_WorkerNI/g' /Users/neilbarrett/Projects/ElectCrm/src/ElectCrm.Infrastructure/Migrations/20260519145712_AddWorkerOnboardingSlice.cs)",
+      "Bash(sed -i '' 's/CMK_NI_Worker/CMK_AzureKeyVault/g; s/CEK_NI_Worker/CEK_WorkerNI/g' /Users/neilbarrett/Projects/ElectCrm/docs/sql/encryption-setup.sql)",
+      "Bash(dotnet tool *)",
+      "Bash(brew list *)",
+      "Bash(pwsh --version)",
+      "Bash(pwsh *)"
     ]
   }
 }

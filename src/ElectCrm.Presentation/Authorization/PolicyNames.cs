@@ -9,6 +9,8 @@ public static class PolicyNames
     public const string ComplianceOfficer = nameof(ComplianceOfficer);
     public const string FinanceOfficer = nameof(FinanceOfficer);
     public const string GroupAdmin = nameof(GroupAdmin);
+    public const string UserAdmin = "UserAdmin";
+    public const string Worker = nameof(Worker);
 }
 
 public static class ElectClaimTypes

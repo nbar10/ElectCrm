@@ -286,6 +286,82 @@ namespace ElectCrm.Infrastructure.Migrations
                     b.ToTable("Clients", (string)null);
                 });
 
+            modelBuilder.Entity("ElectCrm.Domain.Compliance.ComplianceDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DocumentReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateOnly?>("ExpiryDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("IssueDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("LastModifiedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("OtherDescription")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("VerifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiryDate")
+                        .HasDatabaseName("IX_ComplianceDocuments_ExpiryDate");
+
+                    b.HasIndex("LastModifiedById");
+
+                    b.HasIndex("PersonId")
+                        .HasDatabaseName("IX_ComplianceDocuments_PersonId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_ComplianceDocuments_Status");
+
+                    b.HasIndex("VerifiedByUserId");
+
+                    b.HasIndex("PersonId", "DocumentType")
+                        .HasDatabaseName("IX_ComplianceDocuments_PersonId_DocumentType");
+
+                    b.ToTable("ComplianceDocuments", (string)null);
+                });
+
             modelBuilder.Entity("ElectCrm.Domain.Contacts.Contact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -703,6 +779,151 @@ namespace ElectCrm.Infrastructure.Migrations
                     b.ToTable("Vacancies", (string)null);
                 });
 
+            modelBuilder.Entity("ElectCrm.Domain.Workers.WorkerInvite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AgencyBrandId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ConsumedByPersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByConsultantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ExistingPersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("PrefillEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PrefillFirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PrefillLastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PrefillPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsumedByPersonId");
+
+                    b.HasIndex("CreatedByConsultantId")
+                        .HasDatabaseName("IX_WorkerInvites_CreatedByConsultantId");
+
+                    b.HasIndex("ExistingPersonId");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_WorkerInvites_ExpiresAt");
+
+                    b.HasIndex("Token")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkerInvites_Token");
+
+                    b.HasIndex("AgencyBrandId", "Status")
+                        .HasDatabaseName("IX_WorkerInvites_AgencyBrandId_Status");
+
+                    b.ToTable("WorkerInvites", (string)null);
+                });
+
+            modelBuilder.Entity("ElectCrm.Domain.Workers.WorkerProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLine1")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("AddressLine2")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("ApplicationUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateOnly>("DateOfBirth")
+                        .HasColumnType("date");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("MiddleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NationalInsuranceNumber")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("Postcode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTimeOffset>("RightToWorkDeclaredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationUserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkerProfiles_ApplicationUserId");
+
+                    b.ToTable("WorkerProfiles", (string)null);
+                });
+
             modelBuilder.Entity("ElectCrm.Infrastructure.Identity.ApplicationRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -744,6 +965,18 @@ namespace ElectCrm.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetimeoffset")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasDefaultValue("");
+
                     b.Property<Guid>("DomainUserId")
                         .HasColumnType("uniqueidentifier");
 
@@ -753,6 +986,18 @@ namespace ElectCrm.Infrastructure.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("JobTitle")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("LastModifiedById")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
@@ -777,11 +1022,24 @@ namespace ElectCrm.Infrastructure.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
 
+                    b.Property<Guid?>("PrimaryBranchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("RequirePasswordChange")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetimeoffset")
+                        .HasDefaultValueSql("GETUTCDATE()");
 
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
@@ -792,6 +1050,11 @@ namespace ElectCrm.Infrastructure.Migrations
                     b.HasIndex("DomainUserId")
                         .IsUnique();
 
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_AspNetUsers_IsActive");
+
+                    b.HasIndex("LastModifiedById");
+
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
 
@@ -799,6 +1062,12 @@ namespace ElectCrm.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex")
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
+
+                    b.HasIndex("PrimaryBranchId")
+                        .HasDatabaseName("IX_AspNetUsers_PrimaryBranchId");
+
+                    b.HasIndex("PrimaryBranchId", "IsActive")
+                        .HasDatabaseName("IX_AspNetUsers_PrimaryBranchId_IsActive");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -1057,6 +1326,26 @@ namespace ElectCrm.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("PrimaryBranch");
+                });
+
+            modelBuilder.Entity("ElectCrm.Domain.Compliance.ComplianceDocument", b =>
+                {
+                    b.HasOne("ElectCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("LastModifiedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElectCrm.Domain.Persons.Person", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElectCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("VerifiedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("ElectCrm.Domain.Contacts.Contact", b =>
@@ -1336,6 +1625,38 @@ namespace ElectCrm.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ElectCrm.Domain.Workers.WorkerInvite", b =>
+                {
+                    b.HasOne("ElectCrm.Domain.AgencyBrands.AgencyBrand", null)
+                        .WithMany()
+                        .HasForeignKey("AgencyBrandId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElectCrm.Domain.Persons.Person", null)
+                        .WithMany()
+                        .HasForeignKey("ConsumedByPersonId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ElectCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByConsultantId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ElectCrm.Domain.Persons.Person", null)
+                        .WithMany()
+                        .HasForeignKey("ExistingPersonId");
+                });
+
+            modelBuilder.Entity("ElectCrm.Domain.Workers.WorkerProfile", b =>
+                {
+                    b.HasOne("ElectCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ApplicationUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ElectCrm.Infrastructure.Identity.ApplicationUser", b =>
                 {
                     b.HasOne("ElectCrm.Domain.Users.User", null)
@@ -1343,6 +1664,15 @@ namespace ElectCrm.Infrastructure.Migrations
                         .HasForeignKey("ElectCrm.Infrastructure.Identity.ApplicationUser", "DomainUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ElectCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("LastModifiedById");
+
+                    b.HasOne("ElectCrm.Domain.Branches.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("PrimaryBranchId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

@@ -3,6 +3,7 @@ using ElectCrm.Domain.DependencyInjection;
 using ElectCrm.Infrastructure.DependencyInjection;
 using ElectCrm.Presentation.Components;
 using ElectCrm.Presentation.DependencyInjection;
+using ElectCrm.Presentation.Middleware;
 using ElectCrm.Presentation.Seeding;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,7 @@ builder.Services.AddDomainServices();
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddPresentationServices();
+builder.Services.AddScoped<RequirePasswordChangeMiddleware>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -31,6 +33,8 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
+app.UseMiddleware<RequirePasswordChangeMiddleware>();
 app.UseAntiforgery();
 
 app.MapStaticAssets();

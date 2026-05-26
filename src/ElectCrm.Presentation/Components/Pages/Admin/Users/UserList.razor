@@ -1,0 +1,302 @@
+@rendermode InteractiveServer
+@page "/admin/users"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.UserAdmin)]
+@inject UserAdminService UserAdminService
+@inject ICurrentUserContext CurrentUserContext
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject BranchAdminService BranchAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Users — Admin — Elect CRM</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-header-title">Users</h1>
+    <a href="/admin/users/new" class="btn-gold">New User</a>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@* Filter bar *@
+<div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); align-items: flex-end;">
+
+    <div style="flex: 1; min-width: 200px;">
+        <label class="elect-label" for="search-term">Search</label>
+        <input id="search-term" type="text" class="elect-input" placeholder="Name or email…"
+               @bind="_searchTerm" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+    </div>
+
+    <div>
+        <label class="elect-label" for="filter-active">Status</label>
+        <select id="filter-active" class="elect-input" @bind="_filterActive" @bind:after="SearchAsync">
+            <option value="">All</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="elect-label" for="filter-role">Role</label>
+        <select id="filter-role" class="elect-input" @bind="_filterRole" @bind:after="SearchAsync">
+            <option value="">All</option>
+            <option value="Consultant">Consultant</option>
+            <option value="BrandAdmin">Brand Admin</option>
+            <option value="GroupAdmin">Group Admin</option>
+        </select>
+    </div>
+
+    @if (_branches is not null && _branches.Count > 0)
+    {
+        <div>
+            <label class="elect-label" for="filter-branch">Branch</label>
+            <select id="filter-branch" class="elect-input" @bind="_filterBranchId" @bind:after="SearchAsync">
+                <option value="">All Branches</option>
+                @foreach (var branch in _branches)
+                {
+                    <option value="@branch.Id">@branch.Name</option>
+                }
+            </select>
+        </div>
+    }
+
+    @* DESIGN_SYSTEM_GAP:DS-GAP-016 — Brand filter shown for GroupAdmin only *@
+    @if (_isGroupAdmin && _brands is not null && _brands.Count > 0)
+    {
+        <div>
+            <label class="elect-label" for="filter-brand">Brand</label>
+            <select id="filter-brand" class="elect-input" @bind="_filterBrandId" @bind:after="SearchAsync">
+                <option value="">All Brands</option>
+                @foreach (var brand in _brands)
+                {
+                    <option value="@brand.Id">@brand.TradingName</option>
+                }
+            </select>
+        </div>
+    }
+
+    <div>
+        <button class="btn-outline" @onclick="SearchAsync">Search</button>
+    </div>
+
+</div>
+
+@if (_isLoading)
+{
+    <p>Loading…</p>
+}
+else if (_pagedResult is not null && _pagedResult.Items.Count == 0)
+{
+    <div class="elect-empty-state">
+        <p class="elect-empty-state-title">No users found</p>
+        <p class="elect-empty-state-body">Try adjusting your filters, or create a new user.</p>
+        <a href="/admin/users/new" class="btn-gold">New User</a>
+    </div>
+}
+else if (_pagedResult is not null)
+{
+    <div class="elect-table-wrap">
+        <table class="elect-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Branch</th>
+                    @if (_isGroupAdmin)
+                    {
+                        <th>Brand</th>
+                    }
+                    <th>Roles</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th class="col-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var user in _pagedResult.Items)
+                {
+                    <tr @key="user.UserId">
+                        <td>
+                            <a href="/admin/users/@user.UserId" class="elect-detail-link">@user.DisplayName</a>
+                        </td>
+                        <td>@user.Email</td>
+                        <td>@(user.PrimaryBranchName ?? "—")</td>
+                        @if (_isGroupAdmin)
+                        {
+                            <td>@user.AgencyBrandName</td>
+                        }
+                        <td>
+                            @* DESIGN_SYSTEM_GAP:DS-GAP-017 — role badge cluster; using individual elect-badge per role claim *@
+                            <div style="display: flex; gap: var(--space-1); flex-wrap: wrap;">
+                                @foreach (var role in user.Roles)
+                                {
+                                    <span class="elect-badge elect-badge-active" title="@role">@FormatRoleShort(role)</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <span class="elect-badge @(user.IsActive ? "elect-badge-active" : "elect-badge-retired")">
+                                @(user.IsActive ? "Active" : "Inactive")
+                            </span>
+                        </td>
+                        <td>@user.CreatedAt.ToString("d MMM yyyy")</td>
+                        <td class="col-right">
+                            <div class="elect-table-actions">
+                                <a href="/admin/users/@user.UserId" class="btn-outline">View</a>
+                                <a href="/admin/users/@user.UserId/edit" class="btn-outline">Edit</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @* Pagination *@
+    @if (_pagedResult.TotalPages > 1)
+    {
+        <div class="elect-pagination" style="display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-4);">
+            <button class="btn-outline" disabled="@(!_pagedResult.HasPreviousPage)" @onclick="() => GoToPageAsync(_page - 1)">
+                ← Previous
+            </button>
+            <span style="font-size: 0.875rem; color: var(--fg-2);">
+                Page @_page of @_pagedResult.TotalPages (@_pagedResult.TotalCount total)
+            </span>
+            <button class="btn-outline" disabled="@(!_pagedResult.HasNextPage)" @onclick="() => GoToPageAsync(_page + 1)">
+                Next →
+            </button>
+        </div>
+    }
+    else
+    {
+        <p style="font-size: 0.875rem; color: var(--fg-2); margin-top: var(--space-3);">
+            @_pagedResult.TotalCount user(s)
+        </p>
+    }
+}
+
+@code {
+    private PagedResult<UserListDto>? _pagedResult;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+    private bool _isGroupAdmin;
+
+    // Filter state
+    private string _searchTerm = string.Empty;
+    private string _filterActive = string.Empty;
+    private string _filterRole = string.Empty;
+    private string _filterBranchId = string.Empty;
+    private string _filterBrandId = string.Empty;
+    private int _page = 1;
+    private const int PageSize = 20;
+
+    // Dropdown data
+    private IReadOnlyList<BranchSummaryDto>? _branches;
+    private IReadOnlyList<AgencyBrandSummaryDto>? _brands;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isGroupAdmin = CurrentUserContext.IsGroupAdmin;
+        await LoadDropdownsAsync();
+        await SearchAsync();
+    }
+
+    private async Task LoadDropdownsAsync()
+    {
+        if (_isGroupAdmin)
+        {
+            var brandsResult = await AgencyBrandAdminService.GetAllAsync(CancellationToken.None);
+            if (brandsResult.IsSuccess)
+                _brands = brandsResult.Value;
+
+            // For GroupAdmin, load all branches across all brands.
+            // We collect branches per brand and flatten.
+            if (_brands is not null)
+            {
+                var allBranches = new List<BranchSummaryDto>();
+                foreach (var brand in _brands)
+                {
+                    var branchResult = await BranchAdminService.GetByBrandAsync(brand.Id, CancellationToken.None);
+                    if (branchResult.IsSuccess)
+                        allBranches.AddRange(branchResult.Value);
+                }
+                _branches = allBranches;
+            }
+        }
+        else if (CurrentUserContext.IsBrandAdmin && CurrentUserContext.BrandAdminScope.HasValue)
+        {
+            var branchResult = await BranchAdminService.GetByBrandAsync(
+                CurrentUserContext.BrandAdminScope.Value, CancellationToken.None);
+            if (branchResult.IsSuccess)
+                _branches = branchResult.Value;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        bool? isActiveFilter = _filterActive switch
+        {
+            "true" => true,
+            "false" => false,
+            _ => null
+        };
+
+        Guid? branchIdFilter = Guid.TryParse(_filterBranchId, out var bid) ? bid : null;
+        Guid? brandIdFilter = _isGroupAdmin && Guid.TryParse(_filterBrandId, out var brid) ? brid : null;
+
+        var query = new UserSearchQuery(
+            string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm.Trim(),
+            brandIdFilter,
+            branchIdFilter,
+            isActiveFilter,
+            string.IsNullOrWhiteSpace(_filterRole) ? null : _filterRole,
+            _page,
+            PageSize);
+
+        var result = await UserAdminService.SearchUsersAsync(query, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _pagedResult = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _pagedResult = null;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _page = page;
+        await SearchAsync();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _page = 1;
+            await SearchAsync();
+        }
+    }
+
+    private static string FormatRoleShort(string claimValue)
+    {
+        var parts = claimValue.Split(':');
+        return parts[0] switch
+        {
+            "GroupAdmin" => "Group Admin",
+            "BrandAdmin" => "Brand Admin",
+            "Consultant" => "Consultant",
+            _ => parts[0]
+        };
+    }
+}

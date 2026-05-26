@@ -45,6 +45,10 @@ public sealed class ElectUserClaimsPrincipalFactory
             if (brand is not null && brand.Status != AgencyBrandStatus.Active)
                 throw new BrandInactiveException();
 
+            // Check soft deactivation before generating claims.
+            if (!user.IsActive)
+                throw new UserDeactivatedException();
+
             identity.AddClaim(new Claim(
                 TenantContextAccessor.AgencyBrandIdClaimType,
                 domainUser.AgencyBrandId.ToString()));

@@ -1,0 +1,220 @@
+@rendermode InteractiveServer
+@page "/profile"
+@layout MainLayout
+@attribute [Authorize(Policy = PolicyNames.AnyStaff)]
+@inject UserProfileService UserProfileService
+@inject NavigationManager NavigationManager
+
+<PageTitle>My Profile — Elect CRM</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-header-title">My Profile</h1>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+@if (_successMessage is not null)
+{
+    <div class="elect-alert elect-alert-success" role="status">@_successMessage</div>
+}
+
+@if (_isLoading)
+{
+    <p>Loading…</p>
+}
+else if (_profile is not null && _form is not null)
+{
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6);">
+
+        @* Left — editable form *@
+        <div>
+            <div class="elect-form-card">
+                <p class="elect-form-section-title">Edit Profile</p>
+                <EditForm Model="_form" OnValidSubmit="HandleSubmitAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="elect-form-group">
+                        <label class="elect-label" for="display-name">Display Name</label>
+                        <InputText id="display-name" class="elect-input" @bind-Value="_form.DisplayName" />
+                        <ValidationMessage For="() => _form.DisplayName" class="elect-field-error" />
+                    </div>
+
+                    <div class="elect-form-group">
+                        <label class="elect-label" for="job-title">Job Title <span style="color: var(--fg-2);">(optional)</span></label>
+                        <InputText id="job-title" class="elect-input" @bind-Value="_form.JobTitle" />
+                        <ValidationMessage For="() => _form.JobTitle" class="elect-field-error" />
+                    </div>
+
+                    <div class="elect-form-group">
+                        <label class="elect-label" for="phone">Phone Number <span style="color: var(--fg-2);">(optional)</span></label>
+                        <InputText id="phone" class="elect-input" @bind-Value="_form.PhoneNumber" />
+                        <ValidationMessage For="() => _form.PhoneNumber" class="elect-field-error" />
+                    </div>
+
+                    <div class="elect-form-group">
+                        @* // EMAIL_INFRASTRUCTURE_SLICE: email change confirmation flow deferred. Today change is immediate. *@
+                        <label class="elect-label" for="email">Email</label>
+                        <InputText id="email" type="email" class="elect-input" @bind-Value="_form.Email" />
+                        <ValidationMessage For="() => _form.Email" class="elect-field-error" />
+                        <p style="font-size: 0.8125rem; color: var(--fg-2); margin-top: var(--space-1);">
+                            Email changes take effect immediately. Email verification will be required in a future update.
+                        </p>
+                    </div>
+
+                    <div class="elect-form-actions">
+                        <button type="submit" class="btn-gold" disabled="@_isSubmitting">
+                            @(_isSubmitting ? "Saving…" : "Save Changes")
+                        </button>
+                        <a href="/profile/change-password" class="btn-outline">Change Password</a>
+                    </div>
+
+                </EditForm>
+            </div>
+        </div>
+
+        @* Right — read-only info *@
+        <div>
+            <div class="elect-detail-card" style="max-width: none;">
+                <div class="elect-contact-header">
+                    <div class="elect-contact-header-info">
+                        <h2 class="elect-contact-name">Account</h2>
+                    </div>
+                </div>
+                <div class="elect-detail-body">
+                    <div class="elect-detail-grid">
+                        <span class="elect-detail-label">Primary Branch</span>
+                        <span class="elect-detail-value">@(_profile.PrimaryBranchName ?? "—")</span>
+
+                        <span class="elect-detail-label">Brand</span>
+                        <span class="elect-detail-value">@_profile.AgencyBrandName</span>
+
+                        <span class="elect-detail-label">Status</span>
+                        <span class="elect-detail-value">
+                            <span class="elect-badge @(_profile.IsActive ? "elect-badge-active" : "elect-badge-retired")">
+                                @(_profile.IsActive ? "Active" : "Inactive")
+                            </span>
+                        </span>
+
+                        <span class="elect-detail-label">Roles</span>
+                        <span class="elect-detail-value">
+                            @* DESIGN_SYSTEM_GAP:DS-GAP-017 — role badge cluster *@
+                            <div style="display: flex; gap: var(--space-1); flex-wrap: wrap;">
+                                @foreach (var role in _profile.Roles)
+                                {
+                                    <span class="elect-badge elect-badge-active" title="@role">@FormatRoleFull(role)</span>
+                                }
+                            </div>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            @* NOTIFICATION_PREFERENCES_SLICE — notification preferences panel goes here *@
+            @* USER_AVATAR_SLICE — avatar upload goes here *@
+        </div>
+
+    </div>
+}
+
+@code {
+    private UserProfileDto? _profile;
+    private ProfileFormModel? _form;
+    private bool _isLoading = true;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        var result = await UserProfileService.GetProfileAsync(CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _profile = result.Value;
+            _form = new ProfileFormModel
+            {
+                DisplayName = _profile.DisplayName,
+                JobTitle = _profile.JobTitle,
+                PhoneNumber = _profile.PhoneNumber,
+                Email = _profile.Email
+            };
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        if (_form is null)
+            return;
+
+        _isSubmitting = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        var command = new UpdateProfileCommand(
+            _form.DisplayName,
+            string.IsNullOrWhiteSpace(_form.JobTitle) ? null : _form.JobTitle,
+            string.IsNullOrWhiteSpace(_form.PhoneNumber) ? null : _form.PhoneNumber,
+            _form.Email);
+
+        var result = await UserProfileService.UpdateProfileAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = "Profile updated successfully.";
+            // Reload to reflect updated data.
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isSubmitting = false;
+    }
+
+    private static string FormatRoleFull(string claimValue)
+    {
+        var parts = claimValue.Split(':');
+        return parts[0] switch
+        {
+            "GroupAdmin" => "Group Administrator",
+            "BrandAdmin" => "Brand Administrator",
+            "Consultant" => "Recruitment Consultant",
+            _ => claimValue
+        };
+    }
+
+    private sealed class ProfileFormModel
+    {
+        [Required(ErrorMessage = "Display name is required.")]
+        [MaxLength(100, ErrorMessage = "Display name must be 100 characters or fewer.")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [MaxLength(100, ErrorMessage = "Job title must be 100 characters or fewer.")]
+        public string? JobTitle { get; set; }
+
+        [MaxLength(20, ErrorMessage = "Phone number must be 20 characters or fewer.")]
+        public string? PhoneNumber { get; set; }
+
+        [Required(ErrorMessage = "Email is required.")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        public string Email { get; set; } = string.Empty;
+    }
+}

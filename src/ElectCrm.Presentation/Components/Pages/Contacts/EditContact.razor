@@ -22,9 +22,10 @@ else if (_command is not null)
         <ContactForm Model="_command"
                      OnValidSubmit="HandleSubmit"
                      IsSubmitting="_isSubmitting"
-                     ErrorMessage="_errorMessage"
+                     ErrorMessage="@_errorMessage"
                      SubmitLabel="Save Changes"
-                     CancelHref="@($"/app/contacts/{Id}")" />
+                     CancelHref="@($"/app/contacts/{Id}")"
+                     IsEdit="true" />
     </div>
 }
 

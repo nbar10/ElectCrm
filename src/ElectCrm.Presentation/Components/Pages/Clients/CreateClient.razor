@@ -4,6 +4,7 @@
 @inject ClientService ClientService
 @inject BranchAdminService BranchAdminService
 @inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>New Client — Elect CRM</PageTitle>
 
@@ -22,16 +23,13 @@
     <ClientForm Model="_command"
                 OnValidSubmit="HandleSubmit"
                 IsSubmitting="_isSubmitting"
-                ErrorMessage="_formError"
+                ErrorMessage="@_formError"
                 SubmitLabel="Create Client"
                 CancelHref="/app/clients"
                 Branches="_branches" />
 </div>
 
 @code {
-    [CascadingParameter]
-    private Task<AuthenticationState> AuthState { get; set; } = default!;
-
     private CreateClientCommand _command = new(Guid.Empty, string.Empty, null);
     private bool _isSubmitting;
     private string? _errorMessage;
@@ -40,7 +38,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var auth = await AuthState;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         var brandIdClaim = auth.User.FindFirst(ElectClaimTypes.AgencyBrandId)?.Value;
 
         if (Guid.TryParse(brandIdClaim, out var brandId))

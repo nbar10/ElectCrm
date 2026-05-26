@@ -124,6 +124,19 @@ public sealed class ClientService
         return Result<ClientDetailDto>.Success(result);
     }
 
+    public async Task<Result<IReadOnlyList<(Guid Id, string DisplayName)>>> GetAllForPickerAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Global filter handles tenant isolation and !IsDeleted.
+        var raw = await _dbContext.Clients
+            .OrderBy(c => c.LegalName)
+            .Select(c => new { c.Id, DisplayName = c.TradingName ?? c.LegalName })
+            .ToListAsync(cancellationToken);
+
+        return Result<IReadOnlyList<(Guid Id, string DisplayName)>>.Success(
+            raw.Select(x => (x.Id, x.DisplayName)).ToList());
+    }
+
     public async Task<Result<IReadOnlyList<ClientSummaryDto>>> GetAllForBranchAsync(
         Guid branchId,
         CancellationToken cancellationToken = default)

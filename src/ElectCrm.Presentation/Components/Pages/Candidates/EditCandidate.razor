@@ -27,7 +27,7 @@
         <CandidateDetailsForm Model="_command"
                               OnValidSubmit="HandleSubmit"
                               IsSubmitting="_isSubmitting"
-                              ErrorMessage="_errorMessage"
+                              ErrorMessage="@_errorMessage"
                               SubmitLabel="Save Changes"
                               CancelHref="@($"/app/candidates/{Id}")" />
     </div>

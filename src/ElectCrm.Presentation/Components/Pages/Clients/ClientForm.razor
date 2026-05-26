@@ -25,10 +25,13 @@
     </div>
 
     <div class="elect-form-section">
-        <p class="elect-form-section-title">Branch</p>
+        <p class="elect-form-section-title">Managing Branch</p>
 
         <div class="elect-field">
-            <label class="elect-label" for="branchId">Primary Branch <span aria-hidden="true">*</span></label>
+            <label class="elect-label" for="branchId">Our Branch <span aria-hidden="true">*</span></label>
+            <small style="color: var(--fg-2); font-size: 0.8125rem; margin-bottom: var(--space-2); display: block;">
+                Which of our internal branches is responsible for this client account.
+            </small>
             <InputSelect id="branchId" class="elect-input" @bind-Value="_form.PrimaryBranchId">
                 <option value="@Guid.Empty">— select branch —</option>
                 @if (Branches is not null)

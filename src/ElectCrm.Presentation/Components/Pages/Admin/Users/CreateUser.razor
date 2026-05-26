@@ -1,0 +1,269 @@
+@rendermode InteractiveServer
+@page "/admin/users/new"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.UserAdmin)]
+@inject UserAdminService UserAdminService
+@inject ICurrentUserContext CurrentUserContext
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject BranchAdminService BranchAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>New User — Admin — Elect CRM</PageTitle>
+
+<a href="/admin/users" class="back-link">← Users</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">New User</h1>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+}
+
+<div class="elect-form-card">
+    <EditForm Model="_form" OnValidSubmit="HandleSubmitAsync">
+        <DataAnnotationsValidator />
+
+        @* Section 1 — Identity *@
+        <p class="elect-form-section-title">Identity</p>
+
+        <div class="elect-form-group">
+            <label class="elect-label" for="display-name">Display Name</label>
+            <InputText id="display-name" class="elect-input" @bind-Value="_form.DisplayName"
+                       placeholder="Full name as displayed in the system" />
+            <ValidationMessage For="() => _form.DisplayName" class="elect-field-error" />
+        </div>
+
+        <div class="elect-form-group">
+            <label class="elect-label" for="email">Email</label>
+            <InputText id="email" type="email" class="elect-input" @bind-Value="_form.Email" />
+            <ValidationMessage For="() => _form.Email" class="elect-field-error" />
+        </div>
+
+        <div class="elect-form-group">
+            <label class="elect-label" for="job-title">Job Title <span style="color: var(--fg-2);">(optional)</span></label>
+            <InputText id="job-title" class="elect-input" @bind-Value="_form.JobTitle" />
+            <ValidationMessage For="() => _form.JobTitle" class="elect-field-error" />
+        </div>
+
+        @* Section 2 — Organisation *@
+        <p class="elect-form-section-title" style="margin-top: var(--space-6);">Organisation</p>
+
+        @* DESIGN_SYSTEM_GAP:DS-GAP-016 — Branch dropdown; GroupAdmin sees branches grouped by brand *@
+        <div class="elect-form-group">
+            <label class="elect-label" for="primary-branch">Primary Branch</label>
+            <select id="primary-branch" class="elect-input" @bind="_form.PrimaryBranchId">
+                <option value="">— Select branch —</option>
+                @if (_isGroupAdmin && _brands is not null)
+                {
+                    @foreach (var brand in _brands)
+                    {
+                        var brandBranches = _branchesByBrand.TryGetValue(brand.Id, out var bb) ? bb : [];
+                        @if (brandBranches.Count > 0)
+                        {
+                            <optgroup label="@brand.TradingName">
+                                @foreach (var branch in brandBranches)
+                                {
+                                    <option value="@branch.Id">@branch.Name</option>
+                                }
+                            </optgroup>
+                        }
+                    }
+                }
+                else if (_branches is not null)
+                {
+                    @foreach (var branch in _branches)
+                    {
+                        <option value="@branch.Id">@branch.Name</option>
+                    }
+                }
+            </select>
+            <ValidationMessage For="() => _form.PrimaryBranchId" class="elect-field-error" />
+        </div>
+
+        @* Section 3 — Role *@
+        <p class="elect-form-section-title" style="margin-top: var(--space-6);">Initial Role</p>
+
+        @* DESIGN_SYSTEM_GAP:DS-GAP-019 — role selection checkboxes/dropdown; inline workaround *@
+        <div class="elect-form-group">
+            <label class="elect-label" for="initial-role">Role</label>
+            <select id="initial-role" class="elect-input" @bind="_form.InitialRole">
+                <option value="Consultant">Recruitment Consultant</option>
+                @if (_isGroupAdmin)
+                {
+                    <option value="BrandAdmin">Brand Administrator</option>
+                    <option value="GroupAdmin">Group Administrator</option>
+                }
+            </select>
+            <p style="font-size: 0.8125rem; color: var(--fg-2); margin-top: var(--space-1);">
+                The user can be assigned additional roles from their profile page after creation.
+            </p>
+        </div>
+
+        @if (_isGroupAdmin && _brands is not null && _form.InitialRole != "Consultant")
+        {
+            <div class="elect-form-group">
+                <label class="elect-label" for="role-scope-brand">Role Scope (Brand)</label>
+                <select id="role-scope-brand" class="elect-input" @bind="_form.InitialRoleScopeId">
+                    <option value="">— Select brand —</option>
+                    @foreach (var brand in _brands)
+                    {
+                        <option value="@brand.Id">@brand.TradingName</option>
+                    }
+                </select>
+            </div>
+        }
+
+        <div class="elect-form-actions">
+            <button type="submit" class="btn-gold" disabled="@_isSubmitting">
+                @(_isSubmitting ? "Creating…" : "Create User")
+            </button>
+            <a href="/admin/users" class="btn-outline">Cancel</a>
+        </div>
+
+    </EditForm>
+</div>
+
+@* DESIGN_SYSTEM_GAP:DS-GAP-018 — see TempPasswordModal.razor *@
+@* EMAIL_INFRASTRUCTURE_SLICE — replace OTP modal with a welcome email containing a password-set link. *@
+<TempPasswordModal Password="@_tempPassword"
+                   Title="User Created — Save This Password"
+                   Description="Share this password securely with the new user. It will not be shown again."
+                   DismissLabel="I have copied the password"
+                   OnDismiss="DismissOtpModal" />
+
+@code {
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private readonly CreateUserFormModel _form = new();
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private bool _isGroupAdmin;
+
+    // Branch / brand data
+    private IReadOnlyList<BranchSummaryDto>? _branches;
+    private IReadOnlyList<AgencyBrandSummaryDto>? _brands;
+    private Dictionary<Guid, List<BranchSummaryDto>> _branchesByBrand = new();
+
+    // OTP modal state — password held in component state only, cleared on dismiss (see TempPasswordModal.razor)
+    private string? _tempPassword;
+    private Guid _newUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isGroupAdmin = CurrentUserContext.IsGroupAdmin;
+        await LoadBranchesAsync();
+    }
+
+    private async Task LoadBranchesAsync()
+    {
+        if (_isGroupAdmin)
+        {
+            var brandsResult = await AgencyBrandAdminService.GetAllAsync(CancellationToken.None);
+            if (brandsResult.IsSuccess)
+            {
+                _brands = brandsResult.Value;
+                foreach (var brand in _brands)
+                {
+                    var branchResult = await BranchAdminService.GetByBrandAsync(brand.Id, CancellationToken.None);
+                    if (branchResult.IsSuccess)
+                        _branchesByBrand[brand.Id] = branchResult.Value.ToList();
+                }
+            }
+        }
+        else if (CurrentUserContext.IsBrandAdmin && CurrentUserContext.BrandAdminScope.HasValue)
+        {
+            var branchResult = await BranchAdminService.GetByBrandAsync(
+                CurrentUserContext.BrandAdminScope.Value, CancellationToken.None);
+            if (branchResult.IsSuccess)
+                _branches = branchResult.Value;
+        }
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        // Validate at least one role will be assigned (the dropdown ensures a value, but guard anyway).
+        if (string.IsNullOrEmpty(_form.InitialRole))
+        {
+            _errorMessage = "Please select an initial role.";
+            _isSubmitting = false;
+            return;
+        }
+
+        // Resolve the scope ID: for Consultant, use the branch's brand; for BrandAdmin/GroupAdmin
+        // the GroupAdmin explicitly picks the brand. BrandAdmin callers use their own scope.
+        Guid scopeId;
+        if (_isGroupAdmin && _form.InitialRole != "Consultant" && _form.InitialRoleScopeId != Guid.Empty)
+        {
+            scopeId = _form.InitialRoleScopeId;
+        }
+        else if (CurrentUserContext.BrandAdminScope.HasValue)
+        {
+            scopeId = CurrentUserContext.BrandAdminScope.Value;
+        }
+        else if (_form.PrimaryBranchId != Guid.Empty)
+        {
+            // Fall back: the service resolves the brand from the branch.
+            scopeId = Guid.Empty;
+        }
+        else
+        {
+            scopeId = Guid.Empty;
+        }
+
+        var command = new CreateUserCommand(
+            _form.DisplayName,
+            _form.Email,
+            string.IsNullOrWhiteSpace(_form.JobTitle) ? null : _form.JobTitle,
+            _form.PrimaryBranchId == Guid.Empty ? null : _form.PrimaryBranchId,
+            _form.InitialRole,
+            scopeId);
+
+        var result = await UserAdminService.CreateUserAsync(command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _newUserId = result.Value.UserId;
+            // SECURITY — temporaryPassword held in component state only; cleared on dismiss. See TempPasswordModal.razor.
+            _tempPassword = result.Value.TemporaryPassword;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isSubmitting = false;
+    }
+
+    private void DismissOtpModal()
+    {
+        _tempPassword = null; // Clear immediately — never retained past dismissal.
+        NavigationManager.NavigateTo($"/admin/users/{_newUserId}", forceLoad: false);
+    }
+
+    private sealed class CreateUserFormModel
+    {
+        [Required(ErrorMessage = "Display name is required.")]
+        [MaxLength(100, ErrorMessage = "Display name must be 100 characters or fewer.")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email is required.")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        public string Email { get; set; } = string.Empty;
+
+        [MaxLength(100, ErrorMessage = "Job title must be 100 characters or fewer.")]
+        public string? JobTitle { get; set; }
+
+        public Guid PrimaryBranchId { get; set; }
+
+        [Required(ErrorMessage = "Please select an initial role.")]
+        public string InitialRole { get; set; } = "Consultant";
+
+        // Used only when GroupAdmin assigns a non-Consultant role and needs to pick the brand scope.
+        public Guid InitialRoleScopeId { get; set; }
+    }
+}

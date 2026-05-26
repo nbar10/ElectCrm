@@ -1,5 +1,6 @@
 namespace ElectCrm.Infrastructure.DependencyInjection;
 
+using ElectCrm.Application.Common;
 using ElectCrm.Application.Features.Persons;
 using ElectCrm.Domain.Common;
 using ElectCrm.Infrastructure.Features.Admin;
@@ -8,6 +9,7 @@ using ElectCrm.Infrastructure.Features.Clients;
 using ElectCrm.Infrastructure.Features.Contacts;
 using ElectCrm.Infrastructure.Features.Persons;
 using ElectCrm.Infrastructure.Features.Placements;
+using ElectCrm.Infrastructure.Features.Users;
 using ElectCrm.Infrastructure.Features.Vacancies;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Infrastructure.Persistence;
@@ -49,6 +51,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ITenantContext, TenantContextAccessor>();
         services.AddScoped<IDomainEventDispatcher, NoOpDomainEventDispatcher>();
+        services.AddScoped<ICurrentUserContext, CurrentUserContext>();
 
         services.AddScoped<AgencyBrandAdminService>();
         services.AddScoped<BranchAdminService>();
@@ -59,6 +62,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<VacancyService>();
         services.AddScoped<PlacementService>();
         services.AddScoped<IPersonHashingService, PersonHashingService>();
+        services.AddScoped<UserAdminService>();
+        services.AddScoped<UserProfileService>();
 
         return services;
     }

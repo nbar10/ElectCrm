@@ -73,4 +73,31 @@ public sealed class User : IHasDomainEvents, IHasTenantId
     public void Suspend() => Status = UserStatus.Suspended;
     public void Retire() => Status = UserStatus.Retired;
     public void Reactivate() => Status = UserStatus.Active;
+
+    // Note: email uniqueness is enforced by ApplicationUser/UserManager (Identity layer),
+    // not the domain. The domain validates format only; the caller is responsible for
+    // checking uniqueness before invoking this method.
+    public Result UpdateFullName(string newFullName)
+    {
+        if (string.IsNullOrWhiteSpace(newFullName))
+            return Result.Failure(Error.Validation("Full name is required."));
+        FullName = newFullName.Trim();
+        return Result.Success();
+    }
+
+    public Result UpdateEmail(string newEmail, Guid updatedByUserId)
+    {
+        if (string.IsNullOrWhiteSpace(newEmail))
+            return Result.Failure(Error.Validation("Email is required."));
+
+        var normalised = newEmail.Trim().ToLowerInvariant();
+
+        if (string.Equals(Email, normalised, StringComparison.Ordinal))
+            return Result.Success();
+
+        Email = normalised;
+        _domainEvents.Add(new UserProfileUpdatedEvent(Id, AgencyBrandId, DateTimeOffset.UtcNow));
+
+        return Result.Success();
+    }
 }

@@ -1,4 +1,3 @@
-@page "/"
 @page "/account/login"
 @layout AuthLayout
 @using ElectCrm.Domain.Common
@@ -21,7 +20,7 @@
         <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
     }
 
-    <EditForm Model="Input" method="post" OnValidSubmit="LoginAsync" FormName="login">
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginAsync" FormName="login" data-enhance="false">
         <DataAnnotationsValidator />
 
         <div class="elect-field">

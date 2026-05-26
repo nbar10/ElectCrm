@@ -4,6 +4,7 @@
 @inject ClientService ClientService
 @inject BranchAdminService BranchAdminService
 @inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Edit Client — Elect CRM</PageTitle>
 
@@ -23,7 +24,7 @@ else if (_command is not null)
         <ClientForm Model="_command"
                      OnValidSubmit="HandleSubmit"
                      IsSubmitting="_isSubmitting"
-                     ErrorMessage="_errorMessage"
+                     ErrorMessage="@_errorMessage"
                      SubmitLabel="Save Changes"
                      CancelHref="@($"/app/clients/{Id}")"
                      Branches="_branches" />
@@ -32,9 +33,6 @@ else if (_command is not null)
 
 @code {
     [Parameter] public Guid Id { get; set; }
-
-    [CascadingParameter]
-    private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private CreateClientCommand? _command;
     private bool _isSubmitting;
@@ -55,7 +53,7 @@ else if (_command is not null)
         var dto = clientResult.Value;
         _command = new CreateClientCommand(dto.PrimaryBranchId, dto.LegalName, dto.TradingName);
 
-        var auth = await AuthState;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         var brandIdClaim = auth.User.FindFirst(ElectClaimTypes.AgencyBrandId)?.Value;
 
         if (Guid.TryParse(brandIdClaim, out var brandId))

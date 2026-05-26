@@ -1,0 +1,505 @@
+@rendermode InteractiveServer
+@page "/admin/users/{Id:guid}"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.UserAdmin)]
+@inject UserAdminService UserAdminService
+@inject ICurrentUserContext CurrentUserContext
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_user?.DisplayName ?? "User") — Admin — Elect CRM</PageTitle>
+
+<a href="/admin/users" class="back-link">← Users</a>
+
+@if (_notFound)
+{
+    <div class="elect-alert elect-alert-error" role="alert">
+        User not found. <a href="/admin/users" class="elect-detail-link">Back to Users</a>
+    </div>
+}
+else if (_user is not null)
+{
+    @if (_errorMessage is not null)
+    {
+        <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+    }
+    @if (_successMessage is not null)
+    {
+        <div class="elect-alert elect-alert-success" role="status">@_successMessage</div>
+    }
+
+    <div class="page-header">
+        <h1 class="page-header-title">@_user.DisplayName</h1>
+        @* DESIGN_SYSTEM_GAP:DS-GAP-017 — active/inactive status badge; using elect-badge tokens *@
+        <span class="elect-badge @(_user.IsActive ? "elect-badge-active" : "elect-badge-retired")">
+            @(_user.IsActive ? "Active" : "Inactive")
+        </span>
+    </div>
+
+    @* ---- Identity section ---- *@
+    <div class="elect-detail-card" style="max-width: none; margin-bottom: var(--space-6);">
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <h2 class="elect-contact-name">Identity</h2>
+            </div>
+        </div>
+        <div class="elect-detail-body">
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Email</span>
+                <span class="elect-detail-value">@_user.Email</span>
+
+                <span class="elect-detail-label">Job Title</span>
+                <span class="elect-detail-value">@(_user.JobTitle ?? "—")</span>
+
+                <span class="elect-detail-label">Phone</span>
+                <span class="elect-detail-value">@(_user.PhoneNumber ?? "—")</span>
+            </div>
+        </div>
+    </div>
+
+    @* ---- Organisation section ---- *@
+    <div class="elect-detail-card" style="max-width: none; margin-bottom: var(--space-6);">
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <h2 class="elect-contact-name">Organisation</h2>
+            </div>
+        </div>
+        <div class="elect-detail-body">
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Primary Branch</span>
+                <span class="elect-detail-value">@(_user.PrimaryBranchName ?? "—")</span>
+
+                <span class="elect-detail-label">Brand</span>
+                <span class="elect-detail-value">@(_user.AgencyBrandName)</span>
+            </div>
+        </div>
+    </div>
+
+    @* ---- Roles section ---- *@
+    @* DESIGN_SYSTEM_GAP:DS-GAP-017 — role management panel; role badges and inline confirm are workarounds *@
+    <div class="elect-detail-card" style="max-width: none; margin-bottom: var(--space-6);">
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <h2 class="elect-contact-name">Roles</h2>
+                <p class="elect-contact-role">Role changes take effect within 5 minutes on the user's next page load.</p>
+            </div>
+        </div>
+        <div class="elect-detail-body">
+
+            @* Current roles list *@
+            @if (_user.Roles.Count == 0)
+            {
+                <p style="color: var(--fg-2); font-size: 0.875rem;">No roles assigned.</p>
+            }
+            else
+            {
+                <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+                    @foreach (var role in _user.Roles)
+                    {
+                        <div style="display: flex; align-items: center; gap: var(--space-3);">
+                            <span class="elect-badge elect-badge-active">@FormatRoleFull(role)</span>
+                            @if (CanRevokeRole(role))
+                            {
+                                @if (_revokeConfirmRole == role)
+                                {
+                                    <div class="elect-confirm-row">
+                                        <span class="elect-confirm-row-msg">Revoke "@FormatRoleFull(role)"?</span>
+                                        <div class="elect-form-group" style="margin: 0; min-width: 200px;">
+                                            <InputText class="elect-input" placeholder="Reason (optional)"
+                                                       @bind-Value="_revokeReason" />
+                                        </div>
+                                        <button class="btn-danger" @onclick="() => ConfirmRevokeRoleAsync(role)" disabled="@_isWorking">
+                                            Revoke
+                                        </button>
+                                        <button class="btn-outline" @onclick="CancelRoleAction" disabled="@_isWorking">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <button class="btn-outline" style="border-color: var(--warning); color: var(--warning);"
+                                            @onclick="() => BeginRevokeRole(role)" disabled="@_isWorking">
+                                        Revoke
+                                    </button>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Assign role inline form *@
+            @if (_showAssignRole)
+            {
+                <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-1);">
+                    <p class="elect-form-section-title">Assign Role</p>
+                    <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end;">
+                        <div class="elect-form-group" style="margin: 0;">
+                            <label class="elect-label" for="assign-role-select">Role</label>
+                            <select id="assign-role-select" class="elect-input" @bind="_assignRoleName">
+                                <option value="Consultant">Consultant</option>
+                                @if (CurrentUserContext.IsGroupAdmin)
+                                {
+                                    <option value="BrandAdmin">Brand Admin</option>
+                                    <option value="GroupAdmin">Group Admin</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="elect-form-group" style="margin: 0; min-width: 200px;">
+                            <label class="elect-label" for="assign-role-reason">Reason (optional)</label>
+                            <InputText id="assign-role-reason" class="elect-input" placeholder="Reason…"
+                                       @bind-Value="_assignRoleReason" />
+                        </div>
+                        <button class="btn-dark" @onclick="ConfirmAssignRoleAsync" disabled="@_isWorking">
+                            Assign
+                        </button>
+                        <button class="btn-outline" @onclick="() => _showAssignRole = false" disabled="@_isWorking">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div style="margin-top: var(--space-4);">
+                    <button class="btn-outline" @onclick="() => _showAssignRole = true">
+                        + Assign Role
+                    </button>
+                </div>
+            }
+
+        </div>
+    </div>
+
+    @* ---- Audit section ---- *@
+    @* DESIGN_SYSTEM_GAP:DS-GAP-020 — audit display; using elect-detail-grid pattern *@
+    <div class="elect-detail-card" style="max-width: none; margin-bottom: var(--space-6);">
+        <div class="elect-contact-header">
+            <div class="elect-contact-header-info">
+                <h2 class="elect-contact-name">Audit</h2>
+            </div>
+        </div>
+        <div class="elect-detail-body">
+            <div class="elect-detail-grid">
+                <span class="elect-detail-label">Created</span>
+                <span class="elect-detail-value">@_user.CreatedAt.ToString("d MMM yyyy HH:mm")</span>
+
+                <span class="elect-detail-label">Updated</span>
+                <span class="elect-detail-value">@_user.UpdatedAt.ToString("d MMM yyyy HH:mm")</span>
+
+                <span class="elect-detail-label">Last Modified By</span>
+                <span class="elect-detail-value">@(_user.LastModifiedByDisplayName ?? "—")</span>
+            </div>
+        </div>
+    </div>
+
+    @* ---- Action buttons ---- *@
+
+    @* Deactivate confirm row *@
+    @if (_confirmDeactivate)
+    {
+        <div class="elect-confirm-row" style="margin-bottom: var(--space-4);">
+            <span class="elect-confirm-row-msg">Deactivate @_user.DisplayName?</span>
+            <div class="elect-form-group" style="margin: 0; min-width: 220px;">
+                <InputText class="elect-input" placeholder="Reason (optional)" @bind-Value="_deactivateReason" />
+            </div>
+            <button class="btn-danger" @onclick="ConfirmDeactivateAsync" disabled="@_isWorking">
+                Confirm Deactivate
+            </button>
+            <button class="btn-outline" @onclick="() => _confirmDeactivate = false" disabled="@_isWorking">
+                Cancel
+            </button>
+        </div>
+    }
+
+    @* Reactivate confirm row *@
+    @if (_confirmReactivate)
+    {
+        <div class="elect-confirm-row" style="margin-bottom: var(--space-4);">
+            <span class="elect-confirm-row-msg">Reactivate @_user.DisplayName?</span>
+            <button class="btn-dark" @onclick="ConfirmReactivateAsync" disabled="@_isWorking">
+                Confirm Reactivate
+            </button>
+            <button class="btn-outline" @onclick="() => _confirmReactivate = false" disabled="@_isWorking">
+                Cancel
+            </button>
+        </div>
+    }
+
+    @* Reset password confirm row *@
+    @if (_confirmResetPassword)
+    {
+        <div class="elect-confirm-row" style="margin-bottom: var(--space-4);">
+            <span class="elect-confirm-row-msg">Reset password for @_user.DisplayName? A new temporary password will be shown once.</span>
+            <button class="btn-dark" @onclick="ConfirmResetPasswordAsync" disabled="@_isWorking">
+                Confirm Reset
+            </button>
+            <button class="btn-outline" @onclick="() => _confirmResetPassword = false" disabled="@_isWorking">
+                Cancel
+            </button>
+        </div>
+    }
+
+    <div class="elect-detail-actions">
+        <a href="/admin/users/@Id/edit" class="btn-dark">Edit</a>
+
+        @if (_user.IsActive && Id != CurrentUserContext.CurrentUserId)
+        {
+            <button class="btn-outline" style="border-color: var(--warning); color: var(--warning);"
+                    @onclick="() => { _confirmDeactivate = true; _confirmReactivate = false; _confirmResetPassword = false; }"
+                    disabled="@_isWorking">
+                Deactivate
+            </button>
+        }
+
+        @if (!_user.IsActive)
+        {
+            <button class="btn-outline"
+                    @onclick="() => { _confirmReactivate = true; _confirmDeactivate = false; _confirmResetPassword = false; }"
+                    disabled="@_isWorking">
+                Reactivate
+            </button>
+        }
+
+        <button class="btn-outline"
+                @onclick="() => { _confirmResetPassword = true; _confirmDeactivate = false; _confirmReactivate = false; }"
+                disabled="@_isWorking">
+            Reset Password
+        </button>
+    </div>
+
+    @* Out-of-scope placeholders *@
+    @* EMAIL_INFRASTRUCTURE_SLICE — password reset email button goes here *@
+    @* IDENTITY_HARDENING_SLICE — login history panel goes here *@
+    @* AUDIT_LOG_SLICE — audit history panel goes here *@
+}
+
+@* DESIGN_SYSTEM_GAP:DS-GAP-018 — see TempPasswordModal.razor *@
+@* EMAIL_INFRASTRUCTURE_SLICE — replace OTP modal with a password reset email to the user. *@
+<TempPasswordModal Password="@_tempPassword"
+                   OnDismiss="DismissOtpModal" />
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private UserDetailDto? _user;
+    private bool _notFound;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private bool _isWorking;
+
+    // Deactivate / reactivate confirm state
+    private bool _confirmDeactivate;
+    private bool _confirmReactivate;
+    private string _deactivateReason = string.Empty;
+
+    // Reset password confirm state
+    private bool _confirmResetPassword;
+    private string? _tempPassword;
+
+    // Role management state
+    private bool _showAssignRole;
+    private string _assignRoleName = "Consultant";
+    private string _assignRoleReason = string.Empty;
+    private string? _revokeConfirmRole;
+    private string _revokeReason = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _errorMessage = null;
+        var result = await UserAdminService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _user = result.Value;
+    }
+
+    private async Task ConfirmDeactivateAsync()
+    {
+        _isWorking = true;
+        _errorMessage = null;
+        _successMessage = null;
+        _confirmDeactivate = false;
+
+        var command = new DeactivateUserCommand(
+            string.IsNullOrWhiteSpace(_deactivateReason) ? null : _deactivateReason);
+
+        var result = await UserAdminService.DeactivateUserAsync(Id, command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = "User has been deactivated.";
+            _deactivateReason = string.Empty;
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private async Task ConfirmReactivateAsync()
+    {
+        _isWorking = true;
+        _errorMessage = null;
+        _successMessage = null;
+        _confirmReactivate = false;
+
+        var result = await UserAdminService.ReactivateUserAsync(Id, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = "User has been reactivated.";
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private async Task ConfirmResetPasswordAsync()
+    {
+        _isWorking = true;
+        _errorMessage = null;
+        _successMessage = null;
+        _confirmResetPassword = false;
+
+        var result = await UserAdminService.AdminResetPasswordAsync(Id, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            // SECURITY — temporaryPassword held in component state only; never logged or persisted beyond this UI.
+            _tempPassword = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private void DismissOtpModal()
+    {
+        _tempPassword = null; // Clear immediately — never retained past dismissal.
+        // Reload to reflect any state changes.
+        NavigationManager.NavigateTo($"/admin/users/{Id}", forceLoad: false);
+    }
+
+    private bool CanRevokeRole(string roleClaimValue)
+    {
+        // GroupAdmin can revoke any role.
+        if (CurrentUserContext.IsGroupAdmin)
+            return true;
+
+        // BrandAdmin can only revoke Consultant; cannot revoke BrandAdmin or GroupAdmin.
+        if (CurrentUserContext.IsBrandAdmin)
+            return roleClaimValue.StartsWith("Consultant:", StringComparison.Ordinal);
+
+        return false;
+    }
+
+    private void BeginRevokeRole(string roleClaimValue)
+    {
+        _revokeConfirmRole = roleClaimValue;
+        _revokeReason = string.Empty;
+        _showAssignRole = false;
+    }
+
+    private void CancelRoleAction()
+    {
+        _revokeConfirmRole = null;
+        _revokeReason = string.Empty;
+    }
+
+    private async Task ConfirmRevokeRoleAsync(string roleClaimValue)
+    {
+        _isWorking = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        var command = new RevokeRoleCommand(
+            roleClaimValue,
+            string.IsNullOrWhiteSpace(_revokeReason) ? null : _revokeReason);
+
+        var result = await UserAdminService.RevokeRoleAsync(Id, command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = $"Role revoked.";
+            _revokeConfirmRole = null;
+            _revokeReason = string.Empty;
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private async Task ConfirmAssignRoleAsync()
+    {
+        if (_user is null)
+            return;
+
+        _isWorking = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        var roleScope = _assignRoleName == "GroupAdmin" ? "Group" : "Brand";
+        var scopeId = _assignRoleName == "GroupAdmin"
+            ? _user.AgencyBrandId
+            : _user.AgencyBrandId;
+
+        var command = new AssignRoleCommand(
+            _assignRoleName,
+            roleScope,
+            scopeId,
+            string.IsNullOrWhiteSpace(_assignRoleReason) ? null : _assignRoleReason);
+
+        var result = await UserAdminService.AssignRoleAsync(Id, command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _successMessage = "Role assigned.";
+            _showAssignRole = false;
+            _assignRoleName = "Consultant";
+            _assignRoleReason = string.Empty;
+            await LoadAsync();
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+        }
+
+        _isWorking = false;
+    }
+
+    private static string FormatRoleFull(string claimValue)
+    {
+        var parts = claimValue.Split(':');
+        return parts[0] switch
+        {
+            "GroupAdmin" => "Group Administrator",
+            "BrandAdmin" => "Brand Administrator",
+            "Consultant" => "Recruitment Consultant",
+            _ => claimValue
+        };
+    }
+}

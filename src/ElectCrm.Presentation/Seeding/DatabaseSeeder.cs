@@ -75,6 +75,7 @@ public static class DatabaseSeeder
         await SeedCandidatesAsync(brand1, brand2, dbContext, logger);
         await SeedAdminSliceTestDataAsync(brand1, brand2, dbContext, logger);
         await SeedMidlandsTestUserAsync(dbContext, userManager, config, logger);
+        await SeedUserManagementSliceDataAsync(dbContext, userManager, config, logger);
         await SeedVacancySliceTestDataAsync(sp, logger);
         await SeedPlacementSliceTestDataAsync(sp, hashing, logger);
 
@@ -1814,6 +1815,407 @@ public static class DatabaseSeeder
         return await db.Placements
             .IgnoreQueryFilters()
             .AnyAsync(p => p.CandidateId == candidateId && p.VacancyId == vacancyId, ct);
+    }
+
+    private static async Task SeedUserManagementSliceDataAsync(
+        ElectCrmDbContext dbContext,
+        UserManager<ApplicationUser> userManager,
+        IConfiguration config,
+        ILogger logger)
+    {
+        // ── PART A — Backfill existing users ─────────────────────────────────────
+        // Part A always runs regardless of whether Part B has already seeded.
+
+        logger.LogInformation("User management slice — starting Part A backfill of existing users");
+
+        var allBranches = await dbContext.Branches.IgnoreQueryFilters().ToListAsync();
+
+        // admin@elect.group — GroupAdmin/BrandAdmin, no branch, DisplayName="Elect Admin", JobTitle="Group Administrator"
+        var adminUser = await userManager.FindByEmailAsync(AdminEmail);
+        if (adminUser is null)
+        {
+            logger.LogWarning("Backfill: user {Email} not found — skipping", AdminEmail);
+        }
+        else
+        {
+            var adminChanged = false;
+
+            if (string.IsNullOrEmpty(adminUser.DisplayName))
+            {
+                adminUser.DisplayName = "Elect Admin";
+                adminChanged = true;
+            }
+            else if (adminUser.DisplayName != "Elect Admin")
+            {
+                logger.LogInformation(
+                    "Backfill: {Email} DisplayName is '{Current}' — leaving as-is",
+                    AdminEmail, adminUser.DisplayName);
+            }
+
+            if (adminUser.JobTitle is null)
+            {
+                adminUser.JobTitle = "Group Administrator";
+                adminChanged = true;
+            }
+
+            // PrimaryBranchId — plan specifies NULL for this user; leave as-is.
+
+            if (adminChanged)
+            {
+                adminUser.UpdatedAt = DateTimeOffset.UtcNow;
+                var updateResult = await userManager.UpdateAsync(adminUser);
+                if (!updateResult.Succeeded)
+                    logger.LogWarning(
+                        "Backfill: could not update {Email}: {Errors}",
+                        AdminEmail,
+                        string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+                else
+                    logger.LogInformation("Backfill: updated {Email}", AdminEmail);
+            }
+            else
+            {
+                logger.LogDebug("Backfill: {Email} already up to date — no changes", AdminEmail);
+            }
+        }
+
+        // admin2@elect.group — same pattern
+        var admin2User = await userManager.FindByEmailAsync(Admin2Email);
+        if (admin2User is null)
+        {
+            logger.LogWarning("Backfill: user {Email} not found — skipping", Admin2Email);
+        }
+        else
+        {
+            var admin2Changed = false;
+
+            if (string.IsNullOrEmpty(admin2User.DisplayName))
+            {
+                admin2User.DisplayName = "Elect Admin 2";
+                admin2Changed = true;
+            }
+            else if (admin2User.DisplayName != "Elect Admin 2")
+            {
+                logger.LogInformation(
+                    "Backfill: {Email} DisplayName is '{Current}' — leaving as-is",
+                    Admin2Email, admin2User.DisplayName);
+            }
+
+            if (admin2User.JobTitle is null)
+            {
+                admin2User.JobTitle = "Group Administrator";
+                admin2Changed = true;
+            }
+
+            if (admin2Changed)
+            {
+                admin2User.UpdatedAt = DateTimeOffset.UtcNow;
+                var updateResult = await userManager.UpdateAsync(admin2User);
+                if (!updateResult.Succeeded)
+                    logger.LogWarning(
+                        "Backfill: could not update {Email}: {Errors}",
+                        Admin2Email,
+                        string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+                else
+                    logger.LogInformation("Backfill: updated {Email}", Admin2Email);
+            }
+            else
+            {
+                logger.LogDebug("Backfill: {Email} already up to date — no changes", Admin2Email);
+            }
+        }
+
+        // user@midlands-industrial.test — Consultant, Brand 4 / Coventry branch
+        var midlandsUser = await userManager.FindByEmailAsync(MidlandsTestUserEmail);
+        if (midlandsUser is null)
+        {
+            logger.LogWarning("Backfill: user {Email} not found — skipping", MidlandsTestUserEmail);
+        }
+        else
+        {
+            var midlandsChanged = false;
+
+            if (string.IsNullOrEmpty(midlandsUser.DisplayName))
+            {
+                midlandsUser.DisplayName = "Midlands Test User";
+                midlandsChanged = true;
+            }
+            else if (midlandsUser.DisplayName != "Midlands Test User")
+            {
+                logger.LogInformation(
+                    "Backfill: {Email} DisplayName is '{Current}' — leaving as-is",
+                    MidlandsTestUserEmail, midlandsUser.DisplayName);
+            }
+
+            if (midlandsUser.JobTitle is null)
+            {
+                midlandsUser.JobTitle = "Test Consultant";
+                midlandsChanged = true;
+            }
+
+            // PrimaryBranchId — set to Coventry branch (Brand 4) if not already set
+            if (midlandsUser.PrimaryBranchId is null)
+            {
+                var brand4 = await dbContext.AgencyBrands
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand4Chn);
+
+                if (brand4 is null)
+                {
+                    logger.LogWarning(
+                        "Backfill: {Email} — Brand 4 not found; cannot set PrimaryBranchId",
+                        MidlandsTestUserEmail);
+                }
+                else
+                {
+                    var coventryBranch = allBranches
+                        .FirstOrDefault(b => b.Name == "Coventry" && b.AgencyBrandId == brand4.Id);
+
+                    if (coventryBranch is null)
+                    {
+                        logger.LogWarning(
+                            "Backfill: {Email} — Coventry branch not found; cannot set PrimaryBranchId",
+                            MidlandsTestUserEmail);
+                    }
+                    else
+                    {
+                        midlandsUser.PrimaryBranchId = coventryBranch.Id;
+                        midlandsChanged = true;
+                    }
+                }
+            }
+
+            if (midlandsChanged)
+            {
+                midlandsUser.UpdatedAt = DateTimeOffset.UtcNow;
+                var updateResult = await userManager.UpdateAsync(midlandsUser);
+                if (!updateResult.Succeeded)
+                    logger.LogWarning(
+                        "Backfill: could not update {Email}: {Errors}",
+                        MidlandsTestUserEmail,
+                        string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+                else
+                    logger.LogInformation("Backfill: updated {Email}", MidlandsTestUserEmail);
+            }
+            else
+            {
+                logger.LogDebug("Backfill: {Email} already up to date — no changes", MidlandsTestUserEmail);
+            }
+
+            // Check and add Consultant role claim if none exists
+            var existingClaims = await userManager.GetClaimsAsync(midlandsUser);
+            var hasRoleClaim = existingClaims.Any(c => c.Type == ElectClaimTypes.Role);
+            if (!hasRoleClaim)
+            {
+                var brand4ForClaim = await dbContext.AgencyBrands
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand4Chn);
+
+                if (brand4ForClaim is null)
+                {
+                    logger.LogWarning(
+                        "Backfill: {Email} — Brand 4 not found; cannot add Consultant claim",
+                        MidlandsTestUserEmail);
+                }
+                else
+                {
+                    var claimValue = $"{nameof(RoleName.Consultant)}:{nameof(RoleScope.Brand)}:{brand4ForClaim.Id}";
+                    var claimResult = await userManager.AddClaimAsync(
+                        midlandsUser,
+                        new Claim(ElectClaimTypes.Role, claimValue));
+
+                    if (!claimResult.Succeeded)
+                        logger.LogWarning(
+                            "Backfill: could not add Consultant claim for {Email}: {Errors}",
+                            MidlandsTestUserEmail,
+                            string.Join(", ", claimResult.Errors.Select(e => e.Description)));
+                    else
+                        logger.LogInformation(
+                            "Backfill: added Consultant claim for {Email} (Brand {BrandId})",
+                            MidlandsTestUserEmail, brand4ForClaim.Id);
+                }
+            }
+            else
+            {
+                logger.LogDebug(
+                    "Backfill: {Email} already has role claim(s) — skipping claim add",
+                    MidlandsTestUserEmail);
+            }
+        }
+
+        logger.LogInformation("User management slice — Part A backfill complete");
+
+        // ── PART B — Seed new test users ─────────────────────────────────────────
+        // Sentinel: if brandadmin1@elect.group already exists, Part B has already run.
+
+        if (await userManager.FindByEmailAsync("brandadmin1@elect.group") is not null)
+        {
+            logger.LogDebug("User management slice Part B already seeded — skipping");
+            return;
+        }
+
+        var brandAdminPassword = config["DevSeed:BrandAdminPassword"];
+        var consultantPassword = config["DevSeed:ConsultantPassword"];
+
+        var passwordsMissing = false;
+
+        if (string.IsNullOrWhiteSpace(brandAdminPassword))
+        {
+            logger.LogError(
+                "User management seed Part B skipped — 'DevSeed:BrandAdminPassword' is missing from user-secrets. " +
+                "Set it with: dotnet user-secrets set \"DevSeed:BrandAdminPassword\" \"<password>\" --project src/ElectCrm.Presentation");
+            passwordsMissing = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(consultantPassword))
+        {
+            logger.LogError(
+                "User management seed Part B skipped — 'DevSeed:ConsultantPassword' is missing from user-secrets. " +
+                "Set it with: dotnet user-secrets set \"DevSeed:ConsultantPassword\" \"<password>\" --project src/ElectCrm.Presentation");
+            passwordsMissing = true;
+        }
+
+        if (passwordsMissing)
+            return;
+
+        logger.LogInformation("User management slice — starting Part B: seeding 12 new test users");
+
+        // Load brands by CHN
+        var b1 = await dbContext.AgencyBrands.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand1Chn);
+        var b2 = await dbContext.AgencyBrands.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand2Chn);
+        var b3 = await dbContext.AgencyBrands.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(b => b.CompaniesHouseNumber == Brand3Chn);
+
+        if (b1 is null || b2 is null || b3 is null)
+        {
+            logger.LogWarning(
+                "User management seed Part B skipped — one or more required brands not found. " +
+                "Ensure SeedAdminSliceTestDataAsync has run first.");
+            return;
+        }
+
+        // (email, displayName, branchName, brand, jobTitle, roleName, roleScope)
+        var userPlan = new[]
+        {
+            // Brand 1
+            ("brandadmin1@elect.group",   "Sarah Chen",       "London HQ",   b1, "Brand Administrator",    nameof(RoleName.BrandAdmin),  nameof(RoleScope.Brand),  brandAdminPassword),
+            ("consultant1a@elect.group",  "Tom Hughes",       "London HQ",   b1, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+            ("consultant1b@elect.group",  "Emily Rodriguez",  "London HQ",   b1, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+            ("consultant1c@elect.group",  "David Kim",        "Manchester",  b1, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+
+            // Brand 2
+            ("brandadmin2@elect.group",   "Marcus Webb",      "Birmingham",  b2, "Brand Administrator",    nameof(RoleName.BrandAdmin),  nameof(RoleScope.Brand),  brandAdminPassword),
+            ("consultant2a@elect.group",  "Priya Patel",      "Birmingham",  b2, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+            ("consultant2b@elect.group",  "James OConnor",    "Birmingham",  b2, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+
+            // Brand 3
+            ("brandadmin3@northern.test",  "Helen Thornton",  "Leeds",       b3, "Brand Administrator",    nameof(RoleName.BrandAdmin),  nameof(RoleScope.Brand),  brandAdminPassword),
+            ("consultant3a@northern.test", "Robert Singh",    "Leeds",       b3, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+            ("consultant3b@northern.test", "Karen Foster",    "Sheffield",   b3, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+            ("consultant3c@northern.test", "Michael Park",    "Sheffield",   b3, "Recruitment Consultant",  nameof(RoleName.Consultant),  nameof(RoleScope.Brand),  consultantPassword),
+        };
+
+        var createdCount = 0;
+
+        foreach (var (email, displayName, branchName, brand, jobTitle, roleName, roleScope, password) in userPlan)
+        {
+            // Check if user already exists (idempotent per-user guard)
+            if (await userManager.FindByEmailAsync(email) is not null)
+            {
+                logger.LogDebug("Seeding new user {Email} — already exists, skipping", email);
+                continue;
+            }
+
+            // Look up branch
+            var branch = allBranches.FirstOrDefault(b => b.Name == branchName && b.AgencyBrandId == brand.Id);
+            if (branch is null)
+            {
+                logger.LogError(
+                    "Seeding new user {Email} — branch '{Branch}' not found for brand '{Brand}'; skipping this user",
+                    email, branchName, brand.TradingName);
+                continue;
+            }
+
+            // Create domain User entity
+            var userResult = User.Create(new TenantId(brand.Id), displayName, email);
+            if (userResult.IsFailure)
+            {
+                logger.LogError(
+                    "Seeding new user {Email} — could not create domain user: {Error}; skipping",
+                    email, userResult.Error.Message);
+                continue;
+            }
+
+            dbContext.Users.Add(userResult.Value);
+            await dbContext.SaveChangesAsync();
+
+            // Create ApplicationUser
+            var appUser = new ApplicationUser
+            {
+                DomainUserId          = userResult.Value.Id,
+                Email                 = email,
+                UserName              = email,
+                DisplayName           = displayName,
+                PrimaryBranchId       = branch.Id,
+                JobTitle              = jobTitle,
+                IsActive              = true,
+                RequirePasswordChange = false,
+                CreatedAt             = DateTimeOffset.UtcNow,
+                UpdatedAt             = DateTimeOffset.UtcNow,
+                LastModifiedById      = null,
+            };
+
+            var createResult = await userManager.CreateAsync(appUser, password!);
+            if (!createResult.Succeeded)
+            {
+                logger.LogError(
+                    "Seeding new user {Email} — could not create ApplicationUser: {Errors}",
+                    email,
+                    string.Join(", ", createResult.Errors.Select(e => e.Description)));
+
+                // Roll back the committed domain User row.
+                dbContext.Users.Remove(userResult.Value);
+                try
+                {
+                    await dbContext.SaveChangesAsync();
+                }
+                catch (Exception rollbackEx)
+                {
+                    logger.LogError(rollbackEx,
+                        "CRITICAL: Failed to roll back orphaned domain User {DomainUserId} for {Email} " +
+                        "after ApplicationUser creation failure. Manual cleanup required.",
+                        userResult.Value.Id, email);
+                }
+
+                continue;
+            }
+
+            // Add role claim
+            var claimValue = $"{roleName}:{roleScope}:{brand.Id}";
+            var claimsResult = await userManager.AddClaimAsync(
+                appUser,
+                new Claim(ElectClaimTypes.Role, claimValue));
+
+            if (!claimsResult.Succeeded)
+            {
+                logger.LogError(
+                    "Seeding new user {Email} — could not add role claim '{Claim}': {Errors}",
+                    email, claimValue,
+                    string.Join(", ", claimsResult.Errors.Select(e => e.Description)));
+                // User was created; don't block continuation
+                continue;
+            }
+
+            logger.LogInformation(
+                "Seeded user {Email} ('{DisplayName}', {Role} for brand '{Brand}', branch '{Branch}')",
+                email, displayName, roleName, brand.TradingName, branchName);
+            createdCount++;
+        }
+
+        logger.LogInformation(
+            "User management slice Part B complete — {Created} of {Total} new users seeded",
+            createdCount, userPlan.Length);
     }
 
     // Simulates tenant context for seeder code that runs outside of an HTTP request.

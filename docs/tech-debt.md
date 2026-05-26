@@ -188,8 +188,116 @@ Once a placement transitions to `Active`, `HoursPerWeek` is locked (changing it 
 
 ---
 
+## User Management Slice (plan 08 — service layer implementation)
+
+### 🟢 Note
+
+**TD-COMMON-001 — `Error.NotFound` singleton vs factory method inconsistency**
+`Error.NotFound` is a `static readonly` singleton with a fixed generic message. Methods in `UserAdminService` that need a context-specific not-found message (e.g. "User not found in this brand.") use `new Error("NotFound", "message")` directly rather than a factory method, inconsistent with the established factory pattern (`Error.Validation(msg)`, `Error.Conflict(msg)`, etc.). Functionally correct; cosmetically inconsistent.
+- File: `src/ElectCrm.Infrastructure/Features/Users/UserAdminService.cs` (multiple not-found returns with custom messages)
+- First flagged: User Management slice (08) service layer implementation
+- Fix: either (a) add `Error.NotFound(string message)` as a factory overload and rename the existing singleton to `Error.NotFoundDefault`, or (b) convert all `Error` static members to factory methods consistently, removing singleton fields. Address during a tech-debt sweep or when the `Error` type is refactored for another reason.
+
+~~**TD-032 — `User.Email` has `private set` — email update in UserAdminService and UserProfileService uses EF `ExecuteUpdateAsync` to bypass the domain model**~~
+~~Resolved in two steps. 2026-05-14: `User.UpdateEmail` added; `UserProfileService.UpdateProfileAsync` updated. 2026-05-15 (post-review): `UserAdminService.UpdateUserAsync` still used `ExecuteUpdateAsync` bypass — fixed to call `domainUser.UpdateEmail(...)` + `SaveChangesAsync`. Both paths now go through the domain method.~~
+
+**TD-033 — Admin-initiated email change deferred — `EditUser.razor` email field is read-only**
+Plan 08 §1.6 implied admins could change a user's email via the admin edit form. The Presentation layer implementation made the field read-only with an `// EMAIL_INFRASTRUCTURE_SLICE` hook comment, on the basis that admin-initiated email change has security/UX implications (confirmation to new address, security stamp invalidation, clear attribution of who changed whose email) that warrant a deliberate flow rather than an incidental form field.
+- File: `src/ElectCrm.Presentation/Components/Pages/Admin/Users/EditUser.razor`
+- First flagged: User Management slice (08), Presentation layer implementation
+- Fix: when the Email Infrastructure slice ships, build admin-initiated email change as part of that work — confirmation flow to the new address, security stamp invalidation, and clear UX. The `EditUser.razor` email field change is then a straightforward addition. Address alongside `Profile.razor` self-service email change (also deferred via `EMAIL_INFRASTRUCTURE_SLICE` hook).
+- Note: no functional gap today — users cannot change their own email either, so the admin/self-service asymmetry is moot until the email infrastructure slice lands.
+
+## User Management Slice (plan 08 — post-review suggestions, 2026-05-15)
+
+### 🟢 Note
+
+**TD-034 — `AdminLayout` still carries a layout-level `[Authorize]` attribute redundant with per-page gates**
+`AdminLayout.razor` has `@attribute [Authorize(Policy = PolicyNames.UserAdmin)]`. Every page that uses this layout also carries its own `[Authorize(Policy = ...)]` attribute, so the layout gate is redundant — pages control their own access. The layout attribute was changed from `GroupAdmin` to `UserAdmin` (WARN-4 fix) so BrandAdmins can now enter the admin shell, but future GroupAdmin-only pages (e.g. the Brands admin page) would still render the admin shell chrome for a BrandAdmin before the page's `GroupAdmin` gate redirects them. The layout attribute adds no security and creates confusion about which layer owns access.
+- File: `src/ElectCrm.Presentation/Components/Layout/AdminLayout.razor`
+- Fix: remove the layout-level `[Authorize]` entirely. Rely exclusively on per-page `[Authorize(Policy = ...)]` attributes, which are already present on all admin pages. This makes access intent explicit at the point of definition.
+
+**TD-035 — `CurrentUserContext` throws on unauthenticated / no-`HttpContext` access**
+`CurrentUserContext.CurrentUserId` throws `InvalidOperationException` when `HttpContext` is null or when no `NameIdentifier` claim is present. The service is Scoped and reaches only authenticated Blazor pages today, but it could be resolved in contexts without an `HttpContext` (background jobs, health checks, future middleware). Consistent with TD-005 (`TenantContextAccessor` silent-bypass concern in the Foundation slice).
+- File: `src/ElectCrm.Infrastructure/Services/CurrentUserContext.cs`
+- Fix: return `Guid.Empty` / empty string / no-admin-claims state gracefully when `HttpContext` is null or the user is not authenticated, with a `LogWarning` call. Mirror the pattern used (or planned) for `TenantContextAccessor`.
+
+**TD-036 — Seeder email addresses differ from plan §1.8 roster**
+The plan's Part B user roster uses `@electgroup.test` / `@testindustries.test` domain names; the seeder uses `@elect.group` and `@northern.test`. The sentinel check uses `brandadmin1@elect.group` rather than the plan's value. Smoke tests or documentation referencing the plan addresses will not find those users.
+- File: `src/ElectCrm.Presentation/Seeding/DatabaseSeeder.cs`; `docs/plans/08-user-management-slice.md`
+- Fix: update the plan §1.8 roster to match the seeder email addresses as the source of truth. Development-only concern; no data migration needed.
+
+**TD-037 — DS-GAP numbering inconsistency between plan §7 and in-code comments**
+Plan §7 references DS-GAP-013 through DS-GAP-015 for the User Management slice. The code uses DS-GAP-016 through DS-GAP-020. The gap IDs diverged during implementation without a plan update, breaking plan-to-code traceability.
+- File: `docs/plans/08-user-management-slice.md` §7 vs `src/ElectCrm.Presentation/` DS-GAP comments
+- Fix: update plan §7 to reflect DS-GAP-016 through DS-GAP-020.
+
+**TD-038 — `ElectRoleClaimType = "elect_role"` string literal duplicated across two service files**
+`UserAdminService` and `UserProfileService` each define `private const string ElectRoleClaimType = "elect_role"` with a comment explaining the Presentation layer cannot be referenced from Infrastructure. The claim type is now defined in three places (those two files + `ElectClaimTypes.Role` in Presentation). It belongs in the Shared project or in the Application layer where all layers can reach it without a layer violation.
+- File: `src/ElectCrm.Infrastructure/Features/Users/UserAdminService.cs:27`, `UserProfileService.cs:25`
+- Fix: add `ElectClaimTypes` (or `WellKnownClaimTypes`) to the Shared project; remove the local const from both service files. Address alongside a Shared project cleanup pass.
+
+**TD-039 — `SECURITY_STAMP_SLICE` hook comment in `ElectUserClaimsPrincipalFactory` conflates resolved and open work**
+The original `// SECURITY_STAMP_SLICE — invalidate active sessions when brand is paused/retired` comment in `ElectUserClaimsPrincipalFactory.cs` predates Plan 08. Plan 08 resolved the slice for user role changes and deactivation (via `UpdateSecurityStampAsync` in `UserAdminService`), but the brand-pause/retire case — where active user sessions should also be invalidated — remains open. The comment does not distinguish the two, making it appear the full slice is still pending.
+- File: `src/ElectCrm.Infrastructure/Identity/ElectUserClaimsPrincipalFactory.cs`
+- Fix: split the comment into a "resolved" note (role/deactivation path, Plan 08) and an open `// SECURITY_STAMP_SLICE` for brand pause/retire. Update when `AgencyBrandAdminService.PauseAsync` / `RetireAsync` are hardened.
+
+**TD-040 — `UserProfileService` constructor deviates from plan §4.3 — deviation undocumented**
+Plan §4.3 specifies the constructor as `(ElectCrmDbContext, UserManager, IDomainEventDispatcher, ILogger)`. The implementation adds `ICurrentUserContext` so the service can resolve the current user by ID rather than accepting `userId` as a method parameter. The three public methods consequently have no `userId` parameter, meaning the service is structurally incapable of being called on behalf of another user. This is functionally correct for a self-service profile service but is an undocumented deviation from the plan's stated interface.
+- File: `src/ElectCrm.Infrastructure/Features/Users/UserProfileService.cs`
+- Fix: update plan §4.3 to reflect the actual constructor signature and document the constraint that `UserProfileService` is always self-service (current user only). No code change needed.
+
+**TD-041 — `InputText` used outside `<EditForm>` in inline confirm rows**
+`UserDetail.razor` uses `<InputText class="elect-input" @bind-Value="...">` for the deactivation reason field and the role revocation reason field, both of which are outside any `<EditForm>`. `InputText` is designed for form context and may emit Blazor warnings in future SDK versions. Standalone text binding with `<input type="text" @bind="...">` is more semantically correct here.
+- File: `src/ElectCrm.Presentation/Components/Pages/Admin/Users/UserDetail.razor` (deactivate and revoke confirm rows)
+- Fix: replace the two `<InputText>` usages with plain `<input type="text" @bind="...">`. Low-risk cosmetic fix; address when passing through the file.
+
+**TD-042 — `LastModifiedById` self-referential FK lacks `ON DELETE SET NULL` in the database**
+`ApplicationUserConfiguration` specifies `DeleteBehavior.ClientSetNull` for the self-referential `LastModifiedById → AspNetUsers.Id` FK. SQL Server rejects `ON DELETE SET NULL` on self-referential FKs due to its cascade-cycle detection, so the migration generates no `ON DELETE` clause (SQL Server default: `NO ACTION`). If a user who acted as a `LastModifiedBy` actor is hard-deleted directly in the database, the FK constraint will block the delete rather than nulling the reference. In the current system users are only soft-deactivated (never hard-deleted via EF), so this is low-risk; `UserManager.DeleteAsync` would be the failure trigger.
+- File: `src/ElectCrm.Infrastructure/Persistence/Configurations/ApplicationUserConfiguration.cs:54`
+- Fix: if hard-delete is ever introduced, either (a) null `LastModifiedById` for the target user before deleting, or (b) replace the FK with a nullable `DisplayName` snapshot column that does not require a live FK reference. No migration possible via EF due to SQL Server limitation.
+
+---
+
 ## Won't Fix / Intentional (continued)
 
 **TD-W02 — Seeder idempotency: SeedAdminUserAsync skips if user exists but does not reconcile missing claims**
 If a partial first run created the user but not the `GroupAdmin` claim, subsequent runs skip silently. Development-only path; manual fix is to delete the user from the dev DB and re-run. Defer until the seeder is touched again for other reasons.
 - File: `src/ElectCrm.Presentation/Seeding/DatabaseSeeder.cs`
+
+
+TD-WORKER-001 — National Insurance number stored in plain text
+
+Plan 09 §4.6 specified Always Encrypted (deterministic) for 
+WorkerProfile.NationalInsuranceNumber. The encryption setup proved 
+disproportionate to the slice's goals and was deferred. NI is 
+currently stored as plain nvarchar.
+
+Risk: Database breach exposes NI numbers in plain text, attached 
+to names and addresses. This is sensitive identity data under UK 
+GDPR. Lawful basis for processing (contract performance) is sound; 
+storage protection is the residual concern.
+
+Compensating controls (must be in place before any production 
+deployment with real worker data):
+- Production connection strings stored in Azure Key Vault, not in 
+  source or appsettings
+- Production DB access logged and audited
+- No shared credentials; per-developer access where needed
+- TDE enabled on production database (default on Azure SQL)
+- Backup encryption verified
+
+Resolution: A focused Encryption Hardening slice introduces column-
+level encryption (Always Encrypted with Azure Key Vault) before 
+first production worker registration. The slice is BLOCKING for 
+go-live with real worker data — not optional.
+
+Priority: High. Must be resolved before production worker onboarding.
+
+First flagged: Worker Onboarding slice (09), encryption coordination 
+step. The encryption was rolled back after the migration applied 
+without the precondition CMK/CEK in place (the underlying cause 
+was Key Vault setup complexity exceeding the slice's scope).
+
+Affected: WorkerProfile.NationalInsuranceNumber, Plan 09 §4.6, 
+docs/sql/encryption-setup.sql (no longer needed for this slice).

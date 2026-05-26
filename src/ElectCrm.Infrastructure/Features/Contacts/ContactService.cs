@@ -74,9 +74,9 @@ public sealed class ContactService
             _tenantContext.CurrentTenantId,
             command.ClientId,
             command.FullName,
-            command.RoleTitle,
-            command.Email,
-            command.Phone,
+            NullIfEmpty(command.RoleTitle),
+            NullIfEmpty(command.Email),
+            NullIfEmpty(command.Phone),
             command.PrimaryForCategories,
             prefs);
 
@@ -111,9 +111,9 @@ public sealed class ContactService
 
         var result = contact.Update(
             command.FullName,
-            command.RoleTitle,
-            command.Email,
-            command.Phone,
+            NullIfEmpty(command.RoleTitle),
+            NullIfEmpty(command.Email),
+            NullIfEmpty(command.Phone),
             command.PrimaryForCategories,
             prefs);
 
@@ -147,6 +147,9 @@ public sealed class ContactService
 
         return Result.Success();
     }
+
+    private static string? NullIfEmpty(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static ChannelPrefs? BuildChannelPrefs(ChannelPrefsCommand? command)
     {

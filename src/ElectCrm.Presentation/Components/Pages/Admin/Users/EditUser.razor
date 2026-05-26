@@ -1,0 +1,236 @@
+@rendermode InteractiveServer
+@page "/admin/users/{Id:guid}/edit"
+@layout AdminLayout
+@attribute [Authorize(Policy = PolicyNames.UserAdmin)]
+@inject UserAdminService UserAdminService
+@inject ICurrentUserContext CurrentUserContext
+@inject AgencyBrandAdminService AgencyBrandAdminService
+@inject BranchAdminService BranchAdminService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit User — Admin — Elect CRM</PageTitle>
+
+<a href="/admin/users/@Id" class="back-link">← User</a>
+
+<div class="page-header">
+    <h1 class="page-header-title">Edit User</h1>
+</div>
+
+@if (_notFound)
+{
+    <div class="elect-alert elect-alert-error" role="alert">
+        User not found. <a href="/admin/users" class="elect-detail-link">Back to Users</a>
+    </div>
+}
+else if (Id == CurrentUserContext.CurrentUserId)
+{
+    @* Self-edit via admin form is not permitted to prevent accidental permission escalation. *@
+    <div class="elect-alert elect-alert-warning" role="alert">
+        You cannot edit your own user via the admin form.
+        <a href="/profile" class="elect-detail-link">Edit your profile at /profile</a>
+    </div>
+}
+else if (_form is not null)
+{
+    @if (_errorMessage is not null)
+    {
+        <div class="elect-alert elect-alert-error" role="alert">@_errorMessage</div>
+    }
+
+    <div class="elect-form-card">
+        <EditForm Model="_form" OnValidSubmit="HandleSubmitAsync">
+            <DataAnnotationsValidator />
+
+            @* Section 1 — Identity *@
+            <p class="elect-form-section-title">Identity</p>
+
+            <div class="elect-form-group">
+                <label class="elect-label" for="display-name">Display Name</label>
+                <InputText id="display-name" class="elect-input" @bind-Value="_form.DisplayName" />
+                <ValidationMessage For="() => _form.DisplayName" class="elect-field-error" />
+            </div>
+
+            <div class="elect-form-group">
+                @* EMAIL_INFRASTRUCTURE_SLICE — email change for admins is a future flow. *@
+                <label class="elect-label">Email <span style="color: var(--fg-2);">(read-only)</span></label>
+                <div class="elect-input" style="background: var(--bg-page); color: var(--fg-2); cursor: not-allowed;">
+                    @_readOnlyEmail
+                </div>
+                <p style="font-size: 0.8125rem; color: var(--fg-2); margin-top: var(--space-1);">
+                    Email changes are managed separately.
+                </p>
+            </div>
+
+            <div class="elect-form-group">
+                <label class="elect-label" for="job-title">Job Title <span style="color: var(--fg-2);">(optional)</span></label>
+                <InputText id="job-title" class="elect-input" @bind-Value="_form.JobTitle" />
+                <ValidationMessage For="() => _form.JobTitle" class="elect-field-error" />
+            </div>
+
+            <div class="elect-form-group">
+                <label class="elect-label" for="phone">Phone Number <span style="color: var(--fg-2);">(optional)</span></label>
+                <InputText id="phone" class="elect-input" @bind-Value="_form.PhoneNumber" />
+                <ValidationMessage For="() => _form.PhoneNumber" class="elect-field-error" />
+            </div>
+
+            @* Section 2 — Organisation *@
+            <p class="elect-form-section-title" style="margin-top: var(--space-6);">Organisation</p>
+
+            @* DESIGN_SYSTEM_GAP:DS-GAP-016 — Branch dropdown scoped to caller's brand for BrandAdmin *@
+            <div class="elect-form-group">
+                <label class="elect-label" for="primary-branch">Primary Branch</label>
+                <select id="primary-branch" class="elect-input" @bind="_form.PrimaryBranchId">
+                    <option value="">— No primary branch —</option>
+                    @if (_isGroupAdmin && _brands is not null)
+                    {
+                        @foreach (var brand in _brands)
+                        {
+                            var brandBranches = _branchesByBrand.TryGetValue(brand.Id, out var bb) ? bb : [];
+                            @if (brandBranches.Count > 0)
+                            {
+                                <optgroup label="@brand.TradingName">
+                                    @foreach (var branch in brandBranches)
+                                    {
+                                        <option value="@branch.Id">@branch.Name</option>
+                                    }
+                                </optgroup>
+                            }
+                        }
+                    }
+                    else if (_branches is not null)
+                    {
+                        @foreach (var branch in _branches)
+                        {
+                            <option value="@branch.Id">@branch.Name</option>
+                        }
+                    }
+                </select>
+                <ValidationMessage For="() => _form.PrimaryBranchId" class="elect-field-error" />
+            </div>
+
+            @* Read-only info *@
+            <p class="elect-form-section-title" style="margin-top: var(--space-6);">Read-only Fields</p>
+            <p style="font-size: 0.875rem; color: var(--fg-2); margin-bottom: var(--space-4);">
+                Password changes and role assignments are managed from the
+                <a href="/admin/users/@Id" class="elect-detail-link">user's detail page</a>.
+            </p>
+
+            <div class="elect-form-actions">
+                <button type="submit" class="btn-gold" disabled="@_isSubmitting">
+                    @(_isSubmitting ? "Saving…" : "Save Changes")
+                </button>
+                <a href="/admin/users/@Id" class="btn-outline">Cancel</a>
+            </div>
+
+        </EditForm>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private EditUserFormModel? _form;
+    private bool _notFound;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private bool _isGroupAdmin;
+    private string _readOnlyEmail = string.Empty;
+
+    // Branch / brand data
+    private IReadOnlyList<BranchSummaryDto>? _branches;
+    private IReadOnlyList<AgencyBrandSummaryDto>? _brands;
+    private Dictionary<Guid, List<BranchSummaryDto>> _branchesByBrand = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isGroupAdmin = CurrentUserContext.IsGroupAdmin;
+
+        var result = await UserAdminService.GetByIdAsync(Id, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            _notFound = true;
+            return;
+        }
+
+        var user = result.Value;
+        _readOnlyEmail = user.Email;
+
+        _form = new EditUserFormModel
+        {
+            DisplayName = user.DisplayName,
+            JobTitle = user.JobTitle,
+            PhoneNumber = user.PhoneNumber,
+            PrimaryBranchId = user.PrimaryBranchId
+        };
+
+        await LoadBranchesAsync();
+    }
+
+    private async Task LoadBranchesAsync()
+    {
+        if (_isGroupAdmin)
+        {
+            var brandsResult = await AgencyBrandAdminService.GetAllAsync(CancellationToken.None);
+            if (brandsResult.IsSuccess)
+            {
+                _brands = brandsResult.Value;
+                foreach (var brand in _brands)
+                {
+                    var branchResult = await BranchAdminService.GetByBrandAsync(brand.Id, CancellationToken.None);
+                    if (branchResult.IsSuccess)
+                        _branchesByBrand[brand.Id] = branchResult.Value.ToList();
+                }
+            }
+        }
+        else if (CurrentUserContext.IsBrandAdmin && CurrentUserContext.BrandAdminScope.HasValue)
+        {
+            var branchResult = await BranchAdminService.GetByBrandAsync(
+                CurrentUserContext.BrandAdminScope.Value, CancellationToken.None);
+            if (branchResult.IsSuccess)
+                _branches = branchResult.Value;
+        }
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        if (_form is null)
+            return;
+
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        var command = new UpdateUserCommand(
+            _form.DisplayName,
+            string.IsNullOrWhiteSpace(_form.JobTitle) ? null : _form.JobTitle,
+            _form.PrimaryBranchId,
+            _readOnlyEmail);
+
+        var result = await UserAdminService.UpdateUserAsync(Id, command, CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            NavigationManager.NavigateTo($"/admin/users/{Id}", forceLoad: false);
+        }
+        else
+        {
+            _errorMessage = result.Error.Message;
+            _isSubmitting = false;
+        }
+    }
+
+    private sealed class EditUserFormModel
+    {
+        [Required(ErrorMessage = "Display name is required.")]
+        [MaxLength(100, ErrorMessage = "Display name must be 100 characters or fewer.")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [MaxLength(100, ErrorMessage = "Job title must be 100 characters or fewer.")]
+        public string? JobTitle { get; set; }
+
+        [MaxLength(20, ErrorMessage = "Phone number must be 20 characters or fewer.")]
+        public string? PhoneNumber { get; set; }
+
+        public Guid? PrimaryBranchId { get; set; }
+    }
+}

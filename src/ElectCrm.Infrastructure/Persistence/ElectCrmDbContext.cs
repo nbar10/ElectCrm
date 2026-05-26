@@ -5,11 +5,13 @@ using ElectCrm.Domain.Branches;
 using ElectCrm.Domain.Candidates;
 using ElectCrm.Domain.Clients;
 using ElectCrm.Domain.Common;
+using ElectCrm.Domain.Compliance;
 using ElectCrm.Domain.Contacts;
 using ElectCrm.Domain.Persons;
 using ElectCrm.Domain.Users;
 using ElectCrm.Domain.Placements;
 using ElectCrm.Domain.Vacancies;
+using ElectCrm.Domain.Workers;
 using ElectCrm.Infrastructure.Identity;
 using ElectCrm.Shared;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -35,6 +37,9 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Vacancy> Vacancies => Set<Vacancy>();
     public DbSet<Placement> Placements => Set<Placement>();
+    public DbSet<WorkerInvite> WorkerInvites => Set<WorkerInvite>();
+    public DbSet<WorkerProfile> WorkerProfiles => Set<WorkerProfile>();
+    public DbSet<ComplianceDocument> ComplianceDocuments => Set<ComplianceDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -85,6 +90,10 @@ public sealed class ElectCrmDbContext : IdentityDbContext<ApplicationUser, Appli
                  || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value);
 
         modelBuilder.Entity<Placement>().HasQueryFilter(
+            e => _tenantContext.CurrentTenantId == TenantId.Empty
+                 || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value);
+
+        modelBuilder.Entity<WorkerInvite>().HasQueryFilter(
             e => _tenantContext.CurrentTenantId == TenantId.Empty
                  || e.AgencyBrandId == _tenantContext.CurrentTenantId.Value);
     }

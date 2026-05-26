@@ -1,7 +1,11 @@
 @inherits LayoutComponentBase
+@using ElectCrm.Infrastructure.Identity
 @using ElectCrm.Infrastructure.Persistence
+@using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ElectCrmDbContext> DbContextFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
 
 <div class="shell">
 
@@ -87,7 +91,9 @@
         <header class="shell-header">
             <span class="shell-header-tenant">@_tenantName</span>
             <div class="shell-header-sep" role="separator" aria-hidden="true"></div>
-            <span class="shell-header-user">@_userName</span>
+            <a href="/profile" class="shell-header-user">@_userName</a>
+            <div class="shell-header-sep" role="separator" aria-hidden="true"></div>
+            <a href="/profile" class="shell-header-logout" style="color: var(--fg-2);">My Profile</a>
             <div class="shell-header-sep" role="separator" aria-hidden="true"></div>
             <a href="/account/logout" class="shell-header-logout">Sign out</a>
         </header>
@@ -117,6 +123,22 @@
     {
         var auth = await AuthState;
         _userName = auth.User.Identity?.Name ?? string.Empty;
+
+        // Circuit guard — Blazor's long-lived circuit bypasses per-request HTTP middleware
+        // after it is established. Re-check RequirePasswordChange here so that in-circuit
+        // navigation cannot bypass the force-change redirect. See Plan 08 §1.4 / OQ-03.
+        if (auth.User.Identity?.IsAuthenticated == true)
+        {
+            var appUser = await UserManager.GetUserAsync(auth.User);
+            if (appUser?.RequirePasswordChange == true)
+            {
+                var currentUri = NavigationManager.Uri;
+                if (!currentUri.Contains("/profile/change-password", StringComparison.OrdinalIgnoreCase))
+                {
+                    NavigationManager.NavigateTo("/profile/change-password?required=true", forceLoad: false);
+                }
+            }
+        }
 
         _isGroupAdmin = auth.User.Claims.Any(c =>
             c.Type == ElectClaimTypes.Role &&

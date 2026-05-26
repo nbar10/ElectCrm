@@ -1,5 +1,5 @@
 @inherits LayoutComponentBase
-@attribute [Authorize(Policy = PolicyNames.GroupAdmin)]
+@attribute [Authorize(Policy = PolicyNames.UserAdmin)]
 
 <div class="shell admin-shell">
 
@@ -20,8 +20,19 @@
                 Brands
             </NavLink>
 
+            <AuthorizeView Policy="@PolicyNames.UserAdmin">
+                <NavLink class="shell-nav-item" href="/admin/users">
+                    <svg class="shell-nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="8" cy="6" r="3"/>
+                        <path d="M2 18c0-3.314 2.686-6 6-6"/>
+                        <circle cx="15" cy="10" r="2"/>
+                        <path d="M11 18c0-2.2 1.8-4 4-4s4 1.8 4 4"/>
+                    </svg>
+                    Users
+                </NavLink>
+            </AuthorizeView>
+
             @* BRAND_ADMIN_SLICE — BrandAdmin self-service nav items *@
-            @* USER_MANAGEMENT_SLICE — GroupAdmin claim assignment UI goes here *@
 
             <div class="shell-nav-divider" role="separator"></div>
 
